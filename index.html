@@ -1614,7 +1614,11 @@ function handleChallenge(playerId, data) {
     g.discardPile.push(ap.claimedRoleId);
     // 牌堆洗入展示的牌，重新抽一张
     g.deck = shuffle([...g.deck, ap.claimedRoleId]);
-    targetPlayer.cards.push(g.deck.pop());
+    ensureDeck(1); // 防御：避免 deck.pop() 返回 undefined
+    const newCard = g.deck.pop();
+    if (newCard !== undefined) {
+      targetPlayer.cards.push(newCard);
+    }
     addLog(targetPlayer.name + ' 展示了 ' + roleName(ap.claimedRoleId) + ' 并更换了手牌');
     // 若被质疑者不是 Host，定向发送新卡牌
     if (ap.playerId !== g.myPlayerId) {
@@ -1794,7 +1798,11 @@ function handleChallengeBlock(playerId, data) {
     blocker.cards.splice(idx, 1);
     g.discardPile.push(g.pendingBlockRole);
     g.deck = shuffle([...g.deck, g.pendingBlockRole]);
-    blocker.cards.push(g.deck.pop());
+    ensureDeck(1); // 防御：避免 deck.pop() 返回 undefined
+    const newCard2 = g.deck.pop();
+    if (newCard2 !== undefined) {
+      blocker.cards.push(newCard2);
+    }
     // 定向发送新卡牌给阻挡者
     if (g.pendingBlockerId !== g.myPlayerId) {
       sendTo(g.pendingBlockerId, { type: 'my-cards-update', cards: [...blocker.cards] });
@@ -2025,7 +2033,8 @@ function startExchangeFlow(playerId) {
 
   // 确保牌堆有足够的牌
   ensureDeck(2);
-  const drawn = [g.deck.pop(), g.deck.pop()];
+  const c1 = g.deck.pop(), c2 = g.deck.pop();
+  const drawn = [c1, c2].filter(c => c !== undefined); // 过滤可能的 undefined
   // 大使交换后手中必须恰有 2 张牌（若原仅剩 1 张则补回 1 张）
   g.exchangeMaxKeep = Math.min(2, player.cards.length + 2);
   g.exchangeCards = [...player.cards, ...drawn];
@@ -2133,15 +2142,17 @@ function handleExchangeChoice(playerId, data) {
 /** 确保牌堆有足够牌，不够则从弃牌堆洗入 */
 function ensureDeck(n) {
   if (g.deck.length >= n) return;
-  if (g.discardPile.length > 0) {
-    g.deck = shuffle([...g.deck, ...g.discardPile]);
-    g.discardPile = [];
+  // 合并弃牌堆到抽牌堆
+  const allCards = [...g.deck, ...g.discardPile];
+  if (allCards.length > g.deck.length) {
     addLog('🔄 弃牌堆已洗入抽牌堆');
     broadcast({ type: 'log', msg: '🔄 牌堆已用尽，弃牌堆已洗入' });
   }
-  // 如果还不够，只能给剩下的
-  while (g.deck.length < n && g.discardPile.length > 0) {
-    g.deck.push(g.discardPile.pop());
+  g.deck = shuffle(allCards);
+  g.discardPile = [];
+  // 极端安全：若牌仍不够，记录警告（正常游戏不应发生：总牌数 15，玩家最多持有 12）
+  if (g.deck.length < n) {
+    console.warn('ensureDeck: 牌堆 + 弃牌堆不足 ' + n + ' 张，当前仅 ' + g.deck.length + ' 张');
   }
 }
 
