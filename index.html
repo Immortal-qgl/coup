@@ -43,6 +43,24 @@ html, body {
   touch-action: manipulation;
 }
 
+/* 大厅背景 */
+body.lobby-bg {
+  background: var(--bg-primary) url('images/background.png') no-repeat center center / cover;
+  background-attachment: fixed;
+}
+
+/* 大厅半透明玻璃卡片 */
+.lobby-content {
+  background: rgba(13, 15, 26, 0.85);
+  border: 1px solid var(--gold-dark);
+  border-radius: 16px;
+  padding: 24px 20px;
+  max-width: 400px;
+  width: 92%;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 /* ============================================================
    布局容器
    ============================================================ */
@@ -312,12 +330,96 @@ html, body {
 .result-banner.win { background: #1a3a1a; border: 1px solid var(--success); color: var(--success); }
 .result-banner.lose { background: var(--danger-bg); border: 1px solid var(--danger); color: #e74c3c; }
 
+/* ============================================================
+   大厅屏幕居中
+   ============================================================ */
+#screen-lobby {
+  align-items: center; justify-content: center;
+  flex: 1;
+}
+
+/* ============================================================
+   规则弹窗
+   ============================================================ */
+#rules-overlay { z-index: 200; }
+#rules-overlay.active { display: flex; }
+
+.rules-modal {
+  background: var(--bg-secondary);
+  border: 2px solid var(--gold-dark);
+  border-radius: 12px;
+  max-width: 500px; width: 94%; max-height: 85vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.rules-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--gold-dark);
+  flex-shrink: 0;
+}
+.rules-header h2 {
+  font-size: 17px; color: var(--gold-light); margin: 0;
+}
+.rules-body {
+  padding: 14px 16px;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  flex: 1;
+  font-size: 13px; line-height: 1.6;
+}
+.rules-section {
+  margin-bottom: 16px;
+}
+.rules-section h3 {
+  color: var(--gold-light); font-size: 15px;
+  margin-bottom: 6px; border-bottom: 1px solid rgba(201,168,76,0.3);
+  padding-bottom: 4px;
+}
+.rules-section h4 {
+  color: var(--text-primary); font-size: 13px; margin: 8px 0 4px;
+}
+.rules-section p { color: var(--text-secondary); margin: 4px 0; }
+.rules-section ul {
+  color: var(--text-secondary); padding-left: 18px; margin: 4px 0;
+}
+.rules-section ul li { margin-bottom: 3px; }
+
+/* 角色卡片网格（规则页） */
+.role-cards-grid {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  justify-content: center; margin-top: 8px;
+}
+.role-rule-card {
+  background: var(--bg-card); border-radius: 8px;
+  border: 1px solid var(--gold-dark); padding: 8px;
+  text-align: center; width: calc(33.33% - 8px); min-width: 90px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.role-rule-card img {
+  width: 48px; height: 70px; object-fit: cover;
+  border-radius: 4px; margin-bottom: 4px;
+}
+.role-rule-card strong {
+  display: block; color: var(--gold-light); font-size: 13px; margin-bottom: 2px;
+}
+
+/* 规则按钮 */
+.btn-rules {
+  background: transparent; border-color: var(--text-dim);
+  color: var(--text-secondary); font-size: 12px;
+  min-height: 30px; padding: 4px 10px;
+}
+.btn-rules:active { border-color: var(--gold-light); color: var(--gold-light); }
+
 /* 响应式：横屏 / 平板 */
 @media (min-width: 600px) {
   #app { max-width: 800px; }
   #my-cards .card-wrapper img { width: 100px; height: 145px; }
   .opponent-card .opp-cards img { width: 44px; height: 64px; }
   #action-panel .btn { flex: 0 1 auto; min-width: 110px; }
+  .lobby-content { padding: 32px 28px; }
+  .rules-modal { max-width: 560px; }
+  .rules-body { font-size: 14px; }
 }
 </style>
 </head>
@@ -331,6 +433,7 @@ html, body {
       <img id="deck-pile-img" src="images/Card_back.png" alt="牌堆">
       <span id="deck-count-text">0</span>
     </span>
+    <button class="btn btn-small btn-rules" id="btn-rules-game">📖 规则</button>
   </div>
 
   <!-- 主区域 -->
@@ -338,14 +441,17 @@ html, body {
 
     <!-- ====== 大厅屏幕 ====== -->
     <div class="screen active" id="screen-lobby">
-      <div class="game-title">政 变</div>
-      <div class="game-subtitle">Coup · 局域网联机桌游</div>
-      <button class="btn btn-primary btn-block" id="btn-create">🏠 创建房间</button>
-      <div style="text-align:center;color:var(--text-dim);font-size:13px;">— 或 —</div>
-      <input class="input" type="text" id="input-room-code" placeholder="输入 6 位房间码" maxlength="6" inputmode="numeric" pattern="[0-9]*">
-      <input class="input" type="text" id="input-nickname" placeholder="你的昵称" maxlength="8">
-      <button class="btn btn-block" id="btn-join">🚪 加入房间</button>
-      <div id="lobby-error" style="color:#e74c3c;text-align:center;font-size:13px;display:none;"></div>
+      <div class="lobby-content">
+        <div class="game-title">政 变</div>
+        <div class="game-subtitle">Coup · 局域网联机桌游</div>
+        <button class="btn btn-primary btn-block" id="btn-create">🏠 创建房间</button>
+        <div style="text-align:center;color:var(--text-dim);font-size:13px;">— 或 —</div>
+        <input class="input" type="text" id="input-room-code" placeholder="输入 6 位房间码" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+        <input class="input" type="text" id="input-nickname" placeholder="你的昵称" maxlength="8">
+        <button class="btn btn-block" id="btn-join">🚪 加入房间</button>
+        <div id="lobby-error" style="color:#e74c3c;text-align:center;font-size:13px;display:none;"></div>
+        <button class="btn btn-block btn-rules" id="btn-rules-lobby">📖 游戏规则与说明</button>
+      </div>
     </div>
 
     <!-- ====== 房间屏幕 ====== -->
@@ -383,6 +489,88 @@ html, body {
 <!-- ====== 弹窗 ====== -->
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal" id="modal-content"></div>
+</div>
+
+<!-- ====== 规则弹窗 ====== -->
+<div class="modal-overlay" id="rules-overlay">
+  <div class="rules-modal" id="rules-modal">
+    <div class="rules-header">
+      <h2>📖 政变 Coup — 游戏规则</h2>
+      <button class="btn btn-small" id="btn-close-rules">✕ 关闭</button>
+    </div>
+    <div class="rules-body">
+      <div class="rules-section">
+        <h3>🎯 游戏目标</h3>
+        <p>消灭所有其他玩家，成为最后存活者。每位玩家拥有 2 张角色牌（代表 2 条命），失去全部角色牌即被淘汰。</p>
+      </div>
+
+      <div class="rules-section">
+        <h3>🃏 角色与技能（共 5 种，每种 3 张）</h3>
+        <div class="role-cards-grid">
+          <div class="role-rule-card"><img src="images/Duke.png" alt="公爵"><strong>公爵</strong><br>征税：获得 3 金币<br>阻挡：外国援助</div>
+          <div class="role-rule-card"><img src="images/Assassin.png" alt="刺客"><strong>刺客</strong><br>暗杀：付 3 金币，目标失去 1 影响力<br>阻挡：无</div>
+          <div class="role-rule-card"><img src="images/Captain.png" alt="船长"><strong>船长</strong><br>勒索：偷取目标 2 金币<br>阻挡：勒索</div>
+          <div class="role-rule-card"><img src="images/Ambassador.png" alt="大使"><strong>大使</strong><br>交换：抽 2 张交换手牌<br>阻挡：勒索</div>
+          <div class="role-rule-card"><img src="images/Contessa.png" alt="伯爵夫人"><strong>伯爵夫人</strong><br>主动行动：无<br>阻挡：暗杀</div>
+        </div>
+      </div>
+
+      <div class="rules-section">
+        <h3>🔄 回合行动（每回合选一项）</h3>
+        <h4>通用行动（不需声称角色）</h4>
+        <ul>
+          <li><strong>收入</strong> — 获得 1 金币。不可被质疑或阻挡。</li>
+          <li><strong>外国援助</strong> — 获得 2 金币。可被公爵阻挡。</li>
+          <li><strong>政变</strong> — 支付 7 金币，指定目标失去 1 影响力。<strong>不可阻挡</strong>。拥有 10+ 金币时必须执行政变。</li>
+        </ul>
+        <h4>角色行动（声称拥有某角色，无论是否真的有）</h4>
+        <ul>
+          <li><strong>征税（公爵）</strong> — 获得 3 金币。</li>
+          <li><strong>暗杀（刺客）</strong> — 付 3 金币，目标失去 1 影响力。</li>
+          <li><strong>勒索（船长）</strong> — 偷取目标 2 金币。</li>
+          <li><strong>交换（大使）</strong> — 从牌堆抽 2 张，与手牌交换（最多换 2 张）。</li>
+        </ul>
+      </div>
+
+      <div class="rules-section">
+        <h3>⚡ 质疑机制</h3>
+        <p>当玩家<strong>声称拥有某角色</strong>来行动时，任何其他玩家可在 8 秒内发起质疑：</p>
+        <ul>
+          <li><strong>质疑成功</strong>（被质疑者拿不出该角色）→ 行动作废，被质疑者失去 1 影响力</li>
+          <li><strong>质疑失败</strong>（被质疑者真有该角色）→ 质疑者失去 1 影响力；被质疑者展示该角色→洗入牌堆→补抽 1 张</li>
+        </ul>
+        <p>通用行动（收入、外国援助、政变）不可被质疑。</p>
+      </div>
+
+      <div class="rules-section">
+        <h3>🛡 阻挡机制</h3>
+        <ul>
+          <li>外国援助 → 可被<strong>公爵</strong>阻挡</li>
+          <li>暗杀 → 可被目标玩家的<strong>伯爵夫人</strong>阻挡</li>
+          <li>勒索 → 可被目标玩家的<strong>船长/大使</strong>阻挡</li>
+          <li>政变 → <strong>不可阻挡</strong></li>
+        </ul>
+        <p>阻挡也可被质疑（质疑阻挡者是否真有该角色），规则同上。</p>
+      </div>
+
+      <div class="rules-section">
+        <h3>💰 金币规则</h3>
+        <ul>
+          <li>初始每人 2 金币，金币数公开可见</li>
+          <li>持有 <strong>10 枚或以上金币</strong>时，回合中必须执行「政变」</li>
+        </ul>
+      </div>
+
+      <div class="rules-section">
+        <h3>📋 其他规则</h3>
+        <ul>
+          <li>2 人游戏时，开局从牌堆随机移除 3 张牌</li>
+          <li>牌堆用尽时，将弃牌堆洗匀作为新牌堆</li>
+          <li>断线超过 30 秒的玩家自动淘汰</li>
+        </ul>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ====== PeerJS CDN ====== -->
@@ -556,7 +744,8 @@ function hideModal() {
 function preloadImages() {
   const imgs = [
     'images/Duke.png', 'images/Assassin.png', 'images/Captain.png',
-    'images/Ambassador.png', 'images/Contessa.png', 'images/Card_back.png'
+    'images/Ambassador.png', 'images/Contessa.png', 'images/Card_back.png',
+    'images/background.png'
   ];
   imgs.forEach(src => {
     const img = new Image();
@@ -576,17 +765,23 @@ function switchScreen(screenId) {
   // 控制顶栏和底部区域
   const topBar = document.getElementById('top-bar');
   const myArea = document.getElementById('my-area');
+  const deckInfo = document.getElementById('deck-info-display');
   if (screenId === 'game') {
     topBar.style.display = 'flex';
     myArea.style.display = 'flex';
+    if (deckInfo) deckInfo.style.display = 'flex';
+    document.body.classList.remove('lobby-bg');
   } else if (screenId === 'room') {
     topBar.style.display = 'flex';
     myArea.style.display = 'none';
+    if (deckInfo) deckInfo.style.display = 'none';
     document.getElementById('room-info-text').textContent = '房间 ' + g.roomCode;
-    document.getElementById('deck-info-display').style.display = 'none';
+    document.body.classList.remove('lobby-bg');
   } else {
     topBar.style.display = 'none';
     myArea.style.display = 'none';
+    if (deckInfo) deckInfo.style.display = 'none';
+    document.body.classList.add('lobby-bg');
   }
 }
 
@@ -1330,8 +1525,7 @@ function handleActionChoice(playerId, data) {
     executeAction();
   }
 
-  broadcastPhaseUpdate();
-  if (g.isHost) renderGame();
+  // broadcastPhaseUpdate 内部已调用 renderGame，不需重复
 }
 
 // ============================================================
@@ -1413,8 +1607,7 @@ function handleChallenge(playerId, data) {
     g.pendingAction = { ...ap, discardPlayerId: challenger.id, discardReason: '质疑失败', actionStillProceeds: true };
   }
 
-  broadcastPhaseUpdate();
-  renderGame();
+  // broadcastPhaseUpdate 内部已调用 renderGame()，此处不重复调用以免销毁事件监听器
   if (g.isHost) handleDiscardFlow();
 }
 
@@ -1484,7 +1677,6 @@ function handleBlock(playerId, data) {
   g.phase = PHASE.WAITING_BLOCK_CHALLENGE;
   g.challengeTimer = CHALLENGE_TIMEOUT;
   broadcastPhaseUpdate();
-  renderGame();
 
   if (g.isHost) {
     clearGameTimeout();
@@ -1559,8 +1751,6 @@ function handleChallengeBlock(playerId, data) {
     g.pendingAction.discardReason = '阻挡质疑失败';
   }
 
-  broadcastPhaseUpdate();
-  renderGame();
   if (g.isHost) handleDiscardFlow();
 }
 
@@ -1611,7 +1801,6 @@ function executeAction() {
         g.pendingAction.discardPlayerId = target.id;
         g.pendingAction.discardReason = '政变';
         broadcastPhaseUpdate();
-        renderGame();
         handleDiscardFlow();
         return;
       }
@@ -1633,7 +1822,6 @@ function executeAction() {
         g.pendingAction.discardPlayerId = target.id;
         g.pendingAction.discardReason = '暗杀';
         broadcastPhaseUpdate();
-        renderGame();
         handleDiscardFlow();
         return;
       }
@@ -1690,16 +1878,14 @@ function handleDiscardFlow() {
     // 只有一张牌 → 自动弃掉
     discardCard(discardPlayerId, 0);
   } else if (discardPlayerId === g.myPlayerId) {
-    // 需要选择弃哪张
+    // 需要选择弃哪张 — broadcastPhaseUpdate 内部已渲染，直接绑定事件
     g.phase = PHASE.DISCARDING;
     broadcastPhaseUpdate();
-    renderGame();
     enableDiscardSelection();
   } else {
     // 其他玩家弃牌 → 由他们自己选择（通过 phase-update 触发）
     g.phase = PHASE.DISCARDING;
     broadcastPhaseUpdate();
-    renderGame();
   }
 }
 
@@ -1794,7 +1980,6 @@ function startExchangeFlow(playerId) {
       exchangeCards: g.exchangeCards,
     });
   }
-  renderGame();
 }
 
 function showExchangeUI() {
@@ -2026,7 +2211,10 @@ function handlePhaseUpdate(data) {
     });
   }
 
-  // 特殊阶段处理
+  // 先渲染 DOM，再绑定交互事件（否则 renderGame 会销毁刚绑定的事件）
+  renderGame();
+
+  // 特殊阶段处理（DOM 已刷新，事件绑定安全）
   if (g.phase === PHASE.DISCARDING) {
     const ap = g.pendingAction;
     if (ap && ap.discardPlayerId === g.myPlayerId && me() && me().alive && me().cards.length > 1) {
@@ -2038,8 +2226,6 @@ function handlePhaseUpdate(data) {
     g.exchangeCards = data.exchangeCards;
     showExchangeUI();
   }
-
-  renderGame();
 }
 
 function handleActionResult(data) {
@@ -2109,6 +2295,37 @@ document.getElementById('modal-overlay').addEventListener('pointerdown', functio
   if (e.target === this) hideModal();
 });
 
+// ============================================================
+// 规则弹窗
+// ============================================================
+
+function showRules() {
+  document.getElementById('rules-overlay').classList.add('active');
+}
+
+function hideRules() {
+  document.getElementById('rules-overlay').classList.remove('active');
+}
+
+document.getElementById('btn-rules-lobby').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  showRules();
+});
+
+document.getElementById('btn-rules-game').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  showRules();
+});
+
+document.getElementById('btn-close-rules').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  hideRules();
+});
+
+document.getElementById('rules-overlay').addEventListener('pointerdown', function(e) {
+  if (e.target === this) hideRules();
+});
+
 // 输入框优化：数字键盘
 document.getElementById('input-room-code').addEventListener('input', function() {
   this.value = this.value.replace(/[^0-9]/g, '').substring(0, 6);
@@ -2120,6 +2337,8 @@ document.getElementById('input-room-code').addEventListener('input', function() 
 
 preloadImages();
 switchScreen('lobby');
+// 大厅添加背景图 class
+document.body.classList.add('lobby-bg');
 console.log('政变 Coup — 游戏加载完成');
 console.log('角色图片:', Object.values(ROLES).map(r => r.img));
 console.log('卡背:', CARD_BACK);
