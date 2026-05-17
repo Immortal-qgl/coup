@@ -662,9 +662,15 @@ let g = {
   timeoutId: null,
   challengeTimer: 0,
 
+  // 快速跳过追踪（玩家点击"不质疑/不阻挡"后立即结束倒计时）
+  challengePassSet: new Set(),       // 已放弃质疑的玩家 ID
+  blockPassSet: new Set(),           // 已放弃阻挡的玩家 ID
+  blockChallengePassSet: new Set(),  // 已放弃质疑阻挡的玩家 ID
+
   // 大使交换临时数据
   exchangeCards: [],    // 抽到的牌 + 原有牌
   exchangeChosen: new Set(),
+  exchangeMaxKeep: 2,   // 最多保留牌数 = 交换前手牌数
 
   // 断线检测
   lastPing: new Map(),  // playerId → timestamp
@@ -1112,6 +1118,7 @@ function handleJoinerMessage(data) {
     case 'exchange-cards':
       // 接收大使交换的卡牌（仅发送给交换玩家本人）
       g.exchangeCards = data.exchangeCards;
+      g.exchangeMaxKeep = data.exchangeMaxKeep || 2;
       g.exchangeChosen = new Set();
       showExchangeUI();
       break;
@@ -1393,10 +1400,16 @@ function renderChallengeBar() {
     if (ap.playerId === g.myPlayerId) return; // 不能质疑自己
 
     bar.classList.add('active');
-    text.innerHTML = `${escHtml(roleName(ap.claimedRoleId))} · ${ap.type} — <button class="btn btn-danger btn-small" id="btn-challenge">质疑！</button> (${g.challengeTimer}s)`;
+    text.innerHTML = `${escHtml(roleName(ap.claimedRoleId))} · ${ap.type} —
+      <button class="btn btn-danger btn-small" id="btn-challenge">质疑！</button>
+      <button class="btn btn-small" id="btn-pass-challenge">不质疑</button> (${g.challengeTimer}s)`;
     document.getElementById('btn-challenge').addEventListener('pointerdown', (e) => {
       e.preventDefault();
       sendGameMsg('challenge', {});
+    });
+    document.getElementById('btn-pass-challenge').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      sendGameMsg('pass-challenge', {});
     });
     return;
   }
@@ -1407,15 +1420,19 @@ function renderChallengeBar() {
     if (!ap) return;
     // 阻挡者自己不能质疑自己
     if (g.pendingBlockerId === g.myPlayerId) return;
-    // 原行动玩家也可以质疑阻挡（被阻挡的人）
 
     bar.classList.add('active');
     const blockerName = (g.players.find(p => p.id === g.pendingBlockerId) || {}).name || '?';
     text.innerHTML = `${escHtml(blockerName)} 声称 ${escHtml(roleName(g.pendingBlockRole))} 阻挡 —
-      <button class="btn btn-danger btn-small" id="btn-challenge-block">质疑阻挡！</button> (${g.challengeTimer}s)`;
+      <button class="btn btn-danger btn-small" id="btn-challenge-block">质疑阻挡！</button>
+      <button class="btn btn-small" id="btn-pass-block-challenge">不质疑</button> (${g.challengeTimer}s)`;
     document.getElementById('btn-challenge-block').addEventListener('pointerdown', (e) => {
       e.preventDefault();
       sendGameMsg('challenge-block', {});
+    });
+    document.getElementById('btn-pass-block-challenge').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      sendGameMsg('pass-block-challenge', {});
     });
     return;
   }
@@ -1536,6 +1553,7 @@ function startChallengePhase() {
   g.phase = PHASE.WAITING_CHALLENGE;
   g.challengeResolved = false;
   g.challengeTimer = CHALLENGE_TIMEOUT;
+  g.challengePassSet = new Set();
 
   if (g.isHost) {
     clearGameTimeout();
@@ -1611,9 +1629,29 @@ function handleChallenge(playerId, data) {
   if (g.isHost) handleDiscardFlow();
 }
 
+/** 检查是否所有符合条件的玩家都已响应（质疑/阻挡/质疑阻挡阶段） */
+function allEligiblePassed(passSet, eligiblePlayerIds) {
+  return eligiblePlayerIds.every(pid => passSet.has(pid));
+}
+
 function handlePassChallenge(playerId) {
-  // 单个玩家放弃质疑 — 在超时驱动模式下，此方法用于记录
-  // 实际由 Host 超时统一处理
+  if (g.phase !== PHASE.WAITING_CHALLENGE) return;
+  g.challengePassSet.add(playerId);
+  // 符合条件的玩家：所有存活玩家除行动者本人
+  const eligible = g.players.filter(p => p.alive && p.id !== g.pendingAction.playerId).map(p => p.id);
+  if (allEligiblePassed(g.challengePassSet, eligible)) {
+    clearGameTimeout();
+    // 模拟超时：无质疑 → 进入下一步
+    g.phase = g.pendingAction.type === 'foreign_aid' || g.pendingAction.type === 'assassinate' || g.pendingAction.type === 'steal'
+      ? PHASE.WAITING_BLOCK : PHASE.CHOOSING_ACTION;
+    if (g.phase === PHASE.CHOOSING_ACTION) {
+      executeAction();
+    } else {
+      startBlockPhase();
+    }
+    broadcastPhaseUpdate();
+    renderGame();
+  }
 }
 
 // ============================================================
@@ -1623,6 +1661,7 @@ function handlePassChallenge(playerId) {
 function startBlockPhase() {
   g.phase = PHASE.WAITING_BLOCK;
   g.challengeTimer = CHALLENGE_TIMEOUT;
+  g.blockPassSet = new Set();
 
   if (g.isHost) {
     clearGameTimeout();
@@ -1676,6 +1715,7 @@ function handleBlock(playerId, data) {
   // 进入阻挡质疑阶段
   g.phase = PHASE.WAITING_BLOCK_CHALLENGE;
   g.challengeTimer = CHALLENGE_TIMEOUT;
+  g.blockChallengePassSet = new Set();
   broadcastPhaseUpdate();
 
   if (g.isHost) {
@@ -1685,7 +1725,21 @@ function handleBlock(playerId, data) {
 }
 
 function handlePassBlock(playerId) {
-  // 由 Host 超时统一处理
+  if (g.phase !== PHASE.WAITING_BLOCK) return;
+  g.blockPassSet.add(playerId);
+  // 符合条件的阻挡者：目标玩家（暗杀/勒索）或所有其他玩家（外国援助）
+  let eligible;
+  if (g.pendingAction.type === 'foreign_aid') {
+    eligible = g.players.filter(p => p.alive && p.id !== g.pendingAction.playerId).map(p => p.id);
+  } else {
+    eligible = [g.pendingAction.targetId];
+  }
+  if (allEligiblePassed(g.blockPassSet, eligible)) {
+    clearGameTimeout();
+    executeAction();
+    broadcastPhaseUpdate();
+    renderGame();
+  }
 }
 
 // ============================================================
@@ -1755,7 +1809,20 @@ function handleChallengeBlock(playerId, data) {
 }
 
 function handlePassBlockChallenge(playerId) {
-  // 由 Host 超时处理
+  if (g.phase !== PHASE.WAITING_BLOCK_CHALLENGE) return;
+  g.blockChallengePassSet.add(playerId);
+  // 符合条件的质疑者：所有存活玩家除阻挡者本人
+  const eligible = g.players.filter(p => p.alive && p.id !== g.pendingBlockerId).map(p => p.id);
+  if (allEligiblePassed(g.blockChallengePassSet, eligible)) {
+    clearGameTimeout();
+    // 无人质疑阻挡 → 阻挡生效
+    addLog('阻挡生效，行动被取消', 'highlight');
+    broadcast({ type: 'log', msg: '阻挡生效，行动被取消', cls: 'highlight' });
+    g.pendingAction.blocked = true;
+    executeAction();
+    broadcastPhaseUpdate();
+    renderGame();
+  }
 }
 
 // ============================================================
@@ -1959,6 +2026,8 @@ function startExchangeFlow(playerId) {
   // 确保牌堆有足够的牌
   ensureDeck(2);
   const drawn = [g.deck.pop(), g.deck.pop()];
+  // 保留牌数 = 交换前手牌数（剩 1 张只能换 1 张，剩 2 张换 2 张）
+  g.exchangeMaxKeep = player.cards.length;
   g.exchangeCards = [...player.cards, ...drawn];
   g.exchangeChosen = new Set();
   g.phase = PHASE.EXCHANGING;
@@ -1974,29 +2043,33 @@ function startExchangeFlow(playerId) {
     g.exchangeChosen = new Set();
     showExchangeUI();
   } else {
-    // 交换玩家是其他加入者 → 定向发送卡牌数据
+    // 交换玩家是其他加入者 → 定向发送卡牌数据（含保留上限）
     sendTo(playerId, {
       type: 'exchange-cards',
       exchangeCards: g.exchangeCards,
+      exchangeMaxKeep: g.exchangeMaxKeep,
     });
   }
 }
 
 function showExchangeUI() {
   const cards = g.exchangeCards;
+  const maxKeep = g.exchangeMaxKeep;
+  const originalCount = maxKeep; // 交换前手牌数
   const chosen = g.exchangeChosen;
-  const html = `<h3>选择保留的手牌（最多 2 张）</h3>
+  const html = `<h3>选择保留的手牌（必须选 ${maxKeep} 张）</h3>
     <div class="modal-cards" id="exchange-card-list">
       ${cards.map((roleId, i) => {
         const role = getRole(roleId);
         const isChosen = chosen.has(i);
+        const isOriginal = i < originalCount;
         return `<div class="exchange-card-item" data-idx="${i}">
           <img src="${role ? role.img : CARD_BACK}" alt="${role ? role.name : ''}" class="${isChosen ? 'selected' : ''}" width="70" height="102">
-          <div style="font-size:11px;margin-top:4px;">${role ? role.name : ''}${i < cards.length - 2 ? ' (原有)' : ' (新抽)'}</div>
+          <div style="font-size:11px;margin-top:4px;">${role ? role.name : ''}${isOriginal ? ' (原有)' : ' (新抽)'}</div>
         </div>`;
       }).join('')}
     </div>
-    <button class="btn btn-primary btn-block" id="btn-confirm-exchange">确认保留（已选 ${chosen.size}/2）</button>`;
+    <button class="btn btn-primary btn-block" id="btn-confirm-exchange">确认保留（已选 ${chosen.size}/${maxKeep}）</button>`;
 
   showModal(html);
 
@@ -2007,22 +2080,21 @@ function showExchangeUI() {
       if (chosen.has(idx)) {
         chosen.delete(idx);
       } else {
-        if (chosen.size >= 2) {
-          // 移除最早选择的
+        if (chosen.size >= maxKeep) {
+          // 已达到上限，移除最早选择的
           const first = chosen.values().next().value;
           chosen.delete(first);
         }
         chosen.add(idx);
       }
-      // 刷新显示
       showExchangeUI();
     });
   });
 
   document.getElementById('btn-confirm-exchange').addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    if (chosen.size === 0) {
-      addLog('至少选择 1 张手牌保留');
+    if (chosen.size !== maxKeep) {
+      addLog('必须选择 ' + maxKeep + ' 张手牌保留');
       return;
     }
     const keepIndices = Array.from(chosen);
@@ -2049,6 +2121,10 @@ function handleExchangeChoice(playerId, data) {
 
   addLog(player.name + ' 完成了手牌交换', '');
   broadcast({ type: 'log', msg: player.name + ' 完成了手牌交换' });
+  // 定向发送新卡牌给交换玩家（仅自己可见）
+  if (playerId !== g.myPlayerId) {
+    sendTo(playerId, { type: 'my-cards-update', cards: [...keepCards] });
+  }
   broadcast({ type: 'action-result', deckCount: g.deck.length, players: g.players.map(p => ({ id: p.id, coins: p.coins, cardsLen: p.cards.length, alive: p.alive })) });
 
   advanceTurn();
@@ -2091,6 +2167,9 @@ function advanceTurn() {
   g.pendingBlockRole = null;
   g.challengeResolved = false;
   g.blockChallengeResolved = false;
+  g.challengePassSet = new Set();
+  g.blockPassSet = new Set();
+  g.blockChallengePassSet = new Set();
 
   broadcastPhaseUpdate();
   renderGame();
@@ -2236,8 +2315,11 @@ function handleActionResult(data) {
       if (p) {
         p.coins = pu.coins;
         p.alive = pu.alive;
-        while (p.cards.length < pu.cardsLen) p.cards.push('?');
-        while (p.cards.length > pu.cardsLen) p.cards.pop();
+        // 只更新其他玩家的手牌数量（用占位符），不覆盖自己的真实手牌
+        if (p.id !== g.myPlayerId) {
+          while (p.cards.length < pu.cardsLen) p.cards.push('?');
+          while (p.cards.length > pu.cardsLen) p.cards.pop();
+        }
       }
     });
   }
