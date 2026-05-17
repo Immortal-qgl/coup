@@ -2026,8 +2026,8 @@ function startExchangeFlow(playerId) {
   // 确保牌堆有足够的牌
   ensureDeck(2);
   const drawn = [g.deck.pop(), g.deck.pop()];
-  // 保留牌数 = 交换前手牌数（剩 1 张只能换 1 张，剩 2 张换 2 张）
-  g.exchangeMaxKeep = player.cards.length;
+  // 大使交换后手中必须恰有 2 张牌（若原仅剩 1 张则补回 1 张）
+  g.exchangeMaxKeep = Math.min(2, player.cards.length + 2);
   g.exchangeCards = [...player.cards, ...drawn];
   g.exchangeChosen = new Set();
   g.phase = PHASE.EXCHANGING;
@@ -2280,9 +2280,9 @@ function handlePhaseUpdate(data) {
       if (p) {
         p.coins = pu.coins;
         p.alive = pu.alive;
-        // cardsLen 用于知道其他玩家有几张牌，但不能看到内容
-        if (p.id !== g.myPlayerId && pu.cardsLen !== undefined) {
-          // 用占位符更新手牌数量
+        // 只有「非房主客户端」才用占位符隐藏其他玩家的手牌；
+        // 房主必须保有所有玩家的真实手牌数据，用于验证质疑！
+        if (!g.isHost && p.id !== g.myPlayerId && pu.cardsLen !== undefined) {
           while (p.cards.length < pu.cardsLen) p.cards.push('?');
           while (p.cards.length > pu.cardsLen) p.cards.pop();
         }
