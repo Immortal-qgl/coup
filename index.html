@@ -1,0 +1,2129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>政变 Coup — 联机桌游</title>
+<style>
+/* ============================================================
+   CSS Reset & Base — 移动端优先，深色金主题
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-primary: #0d0f1a;
+  --bg-secondary: #151827;
+  --bg-card: #1a1d30;
+  --gold: #c9a84c;
+  --gold-light: #e0c56e;
+  --gold-dark: #8b6914;
+  --text-primary: #e8e0d0;
+  --text-secondary: #a09880;
+  --text-dim: #6a6460;
+  --danger: #c0392b;
+  --danger-bg: #2a1015;
+  --success: #27ae60;
+  --info: #2980b9;
+  --border-radius: 8px;
+  --touch-target: 44px;
+  --font-mono: 'Courier New', monospace;
+}
+
+html, body {
+  height: 100%; width: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+/* ============================================================
+   布局容器
+   ============================================================ */
+#app {
+  display: flex; flex-direction: column;
+  height: 100%; max-width: 800px;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 顶部状态栏 */
+#top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--gold-dark);
+  min-height: var(--touch-target);
+  flex-shrink: 0;
+  gap: 8px;
+}
+#top-bar .room-info {
+  font-size: 13px; color: var(--gold);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#top-bar .deck-info {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text-secondary);
+}
+#top-bar .deck-info img {
+  width: 28px; height: 40px; object-fit: cover; border-radius: 3px;
+}
+
+/* 主内容区 — 可滚动 */
+#main-area {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  padding: 8px 10px;
+  display: flex; flex-direction: column;
+  gap: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ============================================================
+   屏幕：大厅 / 房间 / 游戏
+   ============================================================ */
+.screen { display: none; flex-direction: column; gap: 12px; }
+.screen.active { display: flex; }
+
+/* 标题 */
+.game-title {
+  text-align: center; padding: 20px 0 8px;
+  font-size: 32px; font-weight: 900; color: var(--gold);
+  letter-spacing: 4px;
+  text-shadow: 0 0 20px rgba(201,168,76,0.4);
+}
+.game-subtitle {
+  text-align: center; font-size: 14px; color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+/* 按钮 */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: var(--touch-target); min-width: var(--touch-target);
+  padding: 10px 18px;
+  border: 1px solid var(--gold-dark);
+  border-radius: var(--border-radius);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 15px; font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: center;
+  gap: 6px;
+}
+.btn:active { background: var(--gold-dark); border-color: var(--gold-light); }
+.btn:disabled { opacity: 0.35; pointer-events: none; }
+.btn-primary { background: var(--gold-dark); border-color: var(--gold-light); color: #fff; }
+.btn-primary:active { background: var(--gold); }
+.btn-danger { border-color: var(--danger); background: var(--danger-bg); color: #e74c3c; }
+.btn-danger:active { background: var(--danger); color: #fff; }
+.btn-small { min-height: 34px; padding: 6px 12px; font-size: 13px; }
+.btn-block { display: flex; width: 100%; }
+
+/* 输入框 */
+.input {
+  width: 100%; min-height: var(--touch-target);
+  padding: 10px 14px;
+  border: 1px solid var(--gold-dark); border-radius: var(--border-radius);
+  background: var(--bg-card); color: var(--text-primary);
+  font-size: 16px; text-align: center;
+  outline: none;
+}
+.input:focus { border-color: var(--gold-light); }
+.input::placeholder { color: var(--text-dim); }
+
+/* 房间码大字体 */
+.room-code-display {
+  text-align: center; font-size: 42px; font-weight: 900;
+  letter-spacing: 8px; color: var(--gold-light);
+  padding: 16px;
+  background: var(--bg-card);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--gold-dark);
+  font-family: var(--font-mono);
+}
+
+/* 玩家列表 */
+.player-list { display: flex; flex-direction: column; gap: 6px; }
+.player-list-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; background: var(--bg-card);
+  border-radius: var(--border-radius);
+  border: 1px solid transparent;
+  min-height: var(--touch-target);
+}
+.player-list-item .name { font-weight: 600; }
+.player-list-item .badge {
+  font-size: 12px; padding: 2px 8px; border-radius: 10px;
+  background: var(--gold-dark); color: #fff;
+}
+
+/* ============================================================
+   游戏界面
+   ============================================================ */
+
+/* 回合指示器 */
+.turn-indicator {
+  text-align: center; padding: 6px;
+  font-size: 14px; font-weight: 700; color: var(--gold-light);
+  background: var(--bg-card); border-radius: var(--border-radius);
+  border: 1px solid var(--gold-dark);
+}
+
+/* 对手区 — 横向排列 */
+.opponents-area {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  justify-content: center;
+}
+.opponent-card {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; padding: 8px; background: var(--bg-card);
+  border-radius: var(--border-radius); border: 1px solid transparent;
+  min-width: 80px;
+  transition: border-color 0.2s;
+}
+.opponent-card.current-turn { border-color: var(--gold-light); }
+.opponent-card.eliminated { opacity: 0.4; }
+.opponent-card .opp-name {
+  font-size: 12px; font-weight: 600; max-width: 80px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.opponent-card .opp-coins {
+  font-size: 13px; color: var(--gold); font-weight: 700;
+}
+.opponent-card .opp-cards {
+  display: flex; gap: 3px;
+}
+.opponent-card .opp-cards img {
+  width: 36px; height: 52px; object-fit: cover; border-radius: 4px;
+}
+
+/* 消息日志 */
+#log-area {
+  flex: 1; min-height: 80px; max-height: 150px;
+  overflow-y: auto; padding: 8px;
+  background: var(--bg-card); border-radius: var(--border-radius);
+  border: 1px solid var(--gold-dark);
+  font-size: 12px; color: var(--text-secondary);
+  -webkit-overflow-scrolling: touch;
+}
+#log-area .log-entry { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+#log-area .log-entry.highlight { color: var(--gold-light); font-weight: 600; }
+#log-area .log-entry.danger { color: #e74c3c; }
+
+/* 底部玩家区域 */
+#my-area {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px; background: var(--bg-secondary);
+  border-top: 2px solid var(--gold-dark);
+  flex-shrink: 0;
+}
+#my-info {
+  display: flex; align-items: center; justify-content: space-between;
+}
+#my-name-display { font-weight: 700; font-size: 15px; }
+#my-coins-display {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 20px; font-weight: 900; color: var(--gold-light);
+}
+.coin-icon {
+  display: inline-block; width: 24px; height: 24px;
+  border-radius: 50%; background: radial-gradient(circle at 40% 40%, #f1c40f, #b8860b);
+  border: 2px solid var(--gold-light);
+}
+
+/* 自己的手牌 */
+#my-cards {
+  display: flex; gap: 12px; justify-content: center;
+}
+#my-cards .card-wrapper {
+  position: relative; cursor: pointer;
+}
+#my-cards .card-wrapper img {
+  width: 80px; height: 116px; object-fit: cover;
+  border-radius: 8px; border: 2px solid var(--gold-dark);
+  transition: transform 0.15s, border-color 0.15s;
+}
+#my-cards .card-wrapper:active img { transform: scale(0.95); }
+#my-cards .card-wrapper.selected img {
+  border-color: #e74c3c; box-shadow: 0 0 12px rgba(231,76,60,0.5);
+}
+#my-cards .card-wrapper.selectable img { border-color: var(--gold-light); }
+.card-role-label {
+  position: absolute; bottom: 4px; left: 0; right: 0;
+  text-align: center; font-size: 10px; font-weight: 700;
+  color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  pointer-events: none;
+}
+
+/* 行动面板 */
+#action-panel {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+}
+#action-panel .btn { flex: 1 1 calc(50% - 6px); font-size: 13px; padding: 8px 6px; }
+
+/* 质疑/阻挡提示条 */
+#challenge-bar, #block-bar {
+  display: none; text-align: center; padding: 10px;
+  background: var(--danger-bg); border-radius: var(--border-radius);
+  border: 1px solid var(--danger);
+  animation: pulse 1s infinite;
+}
+#challenge-bar.active, #block-bar.active { display: block; }
+@keyframes pulse {
+  0%, 100% { border-color: var(--danger); }
+  50% { border-color: #e74c3c; }
+}
+
+/* 弹窗/遮罩 */
+.modal-overlay {
+  display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.8); z-index: 100;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: var(--bg-secondary); border: 2px solid var(--gold-dark);
+  border-radius: 12px; padding: 20px; max-width: 360px; width: 90%;
+  display: flex; flex-direction: column; gap: 14px;
+  text-align: center;
+}
+.modal h3 { color: var(--gold-light); font-size: 18px; }
+.modal .modal-cards { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.modal .modal-cards img {
+  width: 70px; height: 102px; object-fit: cover;
+  border-radius: 6px; border: 2px solid transparent; cursor: pointer;
+}
+.modal .modal-cards img.selected { border-color: var(--gold-light); box-shadow: 0 0 10px rgba(201,168,76,0.5); }
+
+/* 坏消息/结果展示 */
+.result-banner {
+  text-align: center; padding: 12px; font-size: 16px; font-weight: 700;
+  border-radius: var(--border-radius); display: none;
+}
+.result-banner.active { display: block; }
+.result-banner.win { background: #1a3a1a; border: 1px solid var(--success); color: var(--success); }
+.result-banner.lose { background: var(--danger-bg); border: 1px solid var(--danger); color: #e74c3c; }
+
+/* 响应式：横屏 / 平板 */
+@media (min-width: 600px) {
+  #app { max-width: 800px; }
+  #my-cards .card-wrapper img { width: 100px; height: 145px; }
+  .opponent-card .opp-cards img { width: 44px; height: 64px; }
+  #action-panel .btn { flex: 0 1 auto; min-width: 110px; }
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- 顶部栏 -->
+  <div id="top-bar" style="display:none;">
+    <span class="room-info" id="room-info-text"></span>
+    <span class="deck-info" id="deck-info-display">
+      <img id="deck-pile-img" src="images/Card_back.png" alt="牌堆">
+      <span id="deck-count-text">0</span>
+    </span>
+  </div>
+
+  <!-- 主区域 -->
+  <div id="main-area">
+
+    <!-- ====== 大厅屏幕 ====== -->
+    <div class="screen active" id="screen-lobby">
+      <div class="game-title">政 变</div>
+      <div class="game-subtitle">Coup · 局域网联机桌游</div>
+      <button class="btn btn-primary btn-block" id="btn-create">🏠 创建房间</button>
+      <div style="text-align:center;color:var(--text-dim);font-size:13px;">— 或 —</div>
+      <input class="input" type="text" id="input-room-code" placeholder="输入 6 位房间码" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+      <input class="input" type="text" id="input-nickname" placeholder="你的昵称" maxlength="8">
+      <button class="btn btn-block" id="btn-join">🚪 加入房间</button>
+      <div id="lobby-error" style="color:#e74c3c;text-align:center;font-size:13px;display:none;"></div>
+    </div>
+
+    <!-- ====== 房间屏幕 ====== -->
+    <div class="screen" id="screen-room">
+      <div style="text-align:center;font-size:14px;color:var(--text-secondary);">房间码</div>
+      <div class="room-code-display" id="room-code-show"></div>
+      <div class="player-list" id="room-player-list"></div>
+      <button class="btn btn-primary btn-block" id="btn-start-game" disabled>🎮 开始游戏（至少 2 人）</button>
+      <button class="btn btn-block" id="btn-leave-room">← 离开房间</button>
+    </div>
+
+    <!-- ====== 游戏屏幕 ====== -->
+    <div class="screen" id="screen-game">
+      <div class="turn-indicator" id="turn-indicator"></div>
+      <div class="opponents-area" id="opponents-area"></div>
+      <div id="log-area"></div>
+      <div id="challenge-bar"><span id="challenge-text"></span></div>
+      <div id="block-bar"><span id="block-text"></span></div>
+      <div class="result-banner" id="result-banner"></div>
+    </div>
+
+  </div>
+
+  <!-- 我的区域（游戏进行时显示） -->
+  <div id="my-area" style="display:none;">
+    <div id="my-info">
+      <span id="my-name-display"></span>
+      <span id="my-coins-display"><span class="coin-icon"></span> <span id="my-coins-num">0</span></span>
+    </div>
+    <div id="my-cards"></div>
+    <div id="action-panel"></div>
+  </div>
+</div>
+
+<!-- ====== 弹窗 ====== -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<!-- ====== PeerJS CDN ====== -->
+<script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+
+<script>
+/* ============================================================
+   政变 Coup — 完整游戏逻辑
+   基于 WebRTC (PeerJS) 的局域网联机实现
+   ============================================================ */
+
+// ============================================================
+// 常量定义
+// ============================================================
+
+/** 游戏角色枚举 */
+const ROLES = {
+  DUKE:        { id: 'duke',       name: '公爵',     action: '征税',     cost: 0, earn: 3, blocksForeignAid: true,  blocksSteal: false, blocksAssassin: false, img: 'images/Duke.png' },
+  ASSASSIN:    { id: 'assassin',   name: '刺客',     action: '暗杀',     cost: 3, earn: 0, blocksForeignAid: false, blocksSteal: false, blocksAssassin: false, img: 'images/Assassin.png' },
+  CAPTAIN:     { id: 'captain',    name: '船长',     action: '勒索',     cost: 0, earn: 0, blocksForeignAid: false, blocksSteal: true,  blocksAssassin: false, img: 'images/Captain.png' },
+  AMBASSADOR:  { id: 'ambassador', name: '大使',     action: '交换',     cost: 0, earn: 0, blocksForeignAid: false, blocksSteal: true,  blocksAssassin: false, img: 'images/Ambassador.png' },
+  CONTESSA:    { id: 'contessa',   name: '伯爵夫人', action: null,       cost: 0, earn: 0, blocksForeignAid: false, blocksSteal: false, blocksAssassin: true,  img: 'images/Contessa.png' },
+};
+
+const CARD_BACK = 'images/Card_back.png';
+
+/** 初始牌库：5 种角色 × 3 张 */
+const FULL_DECK = [
+  ...Array(3).fill('duke'),
+  ...Array(3).fill('assassin'),
+  ...Array(3).fill('captain'),
+  ...Array(3).fill('ambassador'),
+  ...Array(3).fill('contessa'),
+];
+
+/** 状态机阶段 */
+const PHASE = {
+  LOBBY:             'LOBBY',
+  ROOM:              'ROOM',
+  CHOOSING_ACTION:   'CHOOSING_ACTION',
+  WAITING_CHALLENGE: 'WAITING_CHALLENGE',
+  WAITING_BLOCK:     'WAITING_BLOCK',
+  WAITING_BLOCK_CHALLENGE: 'WAITING_BLOCK_CHALLENGE',
+  DISCARDING:        'DISCARDING',
+  EXCHANGING:        'EXCHANGING',
+  GAME_OVER:         'GAME_OVER',
+};
+
+// 可被阻挡的行动 → 可阻挡的角色条件
+const BLOCKABLE_BY = {
+  foreign_aid: (r) => r.blocksForeignAid,  // 公爵可阻挡
+  assassinate: (r) => r.blocksAssassin,     // 伯爵夫人可阻挡
+  steal:       (r) => r.blocksSteal,        // 船长/大使可阻挡
+};
+
+const CHALLENGE_TIMEOUT = 8; // 质疑/阻挡超时秒数
+
+// ============================================================
+// 全局状态
+// ============================================================
+
+let g = {
+  phase: PHASE.LOBBY,
+  isHost: false,
+  roomCode: '',
+  peer: null,           // PeerJS 实例
+  connections: new Map(), // playerId → DataConnection（Host 用）
+  hostConn: null,       // 到 Host 的连接（Joiner 用）
+  myPlayerId: '',
+  myName: '',
+
+  // 游戏状态
+  players: [],          // [{id, name, coins, cards:[roleId,roleId], alive:true}]
+  deck: [],             // 抽牌堆
+  discardPile: [],      // 弃牌堆
+  currentPlayerIdx: 0,
+  turnPhase: null,
+
+  // 当前回合数据
+  pendingAction: null,  // {type, playerId, targetId?, claimedRoleId?, cost:0}
+  pendingBlockerId: null,
+  pendingBlockRole: null,
+
+  // 挑战计数（每回合只能被质疑一次）
+  challengeResolved: false,
+  blockChallengeResolved: false,
+
+  // 超时管理
+  timeoutId: null,
+  challengeTimer: 0,
+
+  // 大使交换临时数据
+  exchangeCards: [],    // 抽到的牌 + 原有牌
+  exchangeChosen: new Set(),
+
+  // 断线检测
+  lastPing: new Map(),  // playerId → timestamp
+  disconnectTimer: null,
+};
+
+// ============================================================
+// 工具函数
+// ============================================================
+
+/** 随机洗牌（Fisher-Yates） */
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** 获取角色配置 */
+function getRole(roleId) { return Object.values(ROLES).find(r => r.id === roleId); }
+
+/** 获取角色中文名 */
+function roleName(roleId) { const r = getRole(roleId); return r ? r.name : roleId; }
+
+/** 获取我的玩家对象 */
+function me() { return g.players.find(p => p.id === g.myPlayerId); }
+
+/** 获取存活玩家数 */
+function aliveCount() { return g.players.filter(p => p.alive).length; }
+
+/** 找到下一个存活玩家索引 */
+function nextAliveIdx(fromIdx) {
+  for (let i = 1; i <= g.players.length; i++) {
+    const idx = (fromIdx + i) % g.players.length;
+    if (g.players[idx].alive) return idx;
+  }
+  return fromIdx; // fallback
+}
+
+/** 清除超时 */
+function clearGameTimeout() {
+  if (g.timeoutId) { clearTimeout(g.timeoutId); g.timeoutId = null; }
+}
+
+// ============================================================
+// 日志
+// ============================================================
+
+function addLog(msg, cls = '') {
+  const el = document.getElementById('log-area');
+  const div = document.createElement('div');
+  div.className = 'log-entry ' + cls;
+  div.textContent = msg;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ============================================================
+// 弹窗
+// ============================================================
+
+function showModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+function hideModal() {
+  document.getElementById('modal-overlay').classList.remove('active');
+}
+
+// ============================================================
+// 图片预加载
+// ============================================================
+
+function preloadImages() {
+  const imgs = [
+    'images/Duke.png', 'images/Assassin.png', 'images/Captain.png',
+    'images/Ambassador.png', 'images/Contessa.png', 'images/Card_back.png'
+  ];
+  imgs.forEach(src => {
+    const img = new Image();
+    img.src = src;
+  });
+}
+
+// ============================================================
+// 切换屏幕
+// ============================================================
+
+function switchScreen(screenId) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const target = document.getElementById('screen-' + screenId);
+  if (target) target.classList.add('active');
+
+  // 控制顶栏和底部区域
+  const topBar = document.getElementById('top-bar');
+  const myArea = document.getElementById('my-area');
+  if (screenId === 'game') {
+    topBar.style.display = 'flex';
+    myArea.style.display = 'flex';
+  } else if (screenId === 'room') {
+    topBar.style.display = 'flex';
+    myArea.style.display = 'none';
+    document.getElementById('room-info-text').textContent = '房间 ' + g.roomCode;
+    document.getElementById('deck-info-display').style.display = 'none';
+  } else {
+    topBar.style.display = 'none';
+    myArea.style.display = 'none';
+  }
+}
+
+// ============================================================
+// 网络消息发送
+// ============================================================
+
+/** Host: 广播给所有其他玩家 */
+function broadcast(msg) {
+  g.connections.forEach((conn, pid) => {
+    if (conn.open) {
+      try { conn.send(msg); } catch(e) { console.warn('broadcast fail', pid, e); }
+    }
+  });
+}
+
+/** Host: 发送给指定玩家 */
+function sendTo(playerId, msg) {
+  const conn = g.connections.get(playerId);
+  if (conn && conn.open) {
+    try { conn.send(msg); } catch(e) { console.warn('sendTo fail', playerId, e); }
+  }
+}
+
+/** Joiner: 发送给 Host */
+function sendToHost(msg) {
+  if (g.hostConn && g.hostConn.open) {
+    try { g.hostConn.send(msg); } catch(e) { console.warn('sendToHost fail', e); }
+  }
+}
+
+// ============================================================
+// PeerJS 连接管理
+// ============================================================
+
+function initHost(roomCode) {
+  g.isHost = true;
+  g.roomCode = roomCode;
+  g.myPlayerId = 'host-' + randomId();
+  g.phase = PHASE.ROOM;
+
+  const peerId = 'coup-' + roomCode;
+  g.peer = new Peer(peerId);
+
+  g.peer.on('open', () => {
+    console.log('Host peer open:', peerId);
+    // 把自己加入玩家列表
+    g.players = [{ id: g.myPlayerId, name: g.myName, coins: 0, cards: [], alive: true }];
+    switchScreen('room');
+    document.getElementById('room-code-show').textContent = g.roomCode;
+    renderRoomPlayers();
+  });
+
+  g.peer.on('connection', (conn) => {
+    conn.on('open', () => {
+      // 等待 join 消息
+    });
+    conn.on('data', (data) => handleHostMessage(conn, data));
+    conn.on('close', () => {
+      const pid = findPlayerByConn(conn);
+      if (pid) handlePlayerLeft(pid);
+    });
+    conn.on('error', (err) => { console.warn('conn error', err); });
+  });
+
+  g.peer.on('error', (err) => {
+    console.error('Peer error:', err);
+    if (err.type === 'unavailable-id') {
+      alert('该房间码已被占用，请重试。');
+      resetToLobby();
+    }
+  });
+
+  g.peer.on('disconnected', () => {
+    console.log('Peer disconnected, attempting reconnect...');
+    g.peer.reconnect();
+  });
+
+  // 断线检测定时器
+  g.disconnectTimer = setInterval(() => {
+    const now = Date.now();
+    g.players.forEach(p => {
+      if (p.id === g.myPlayerId) return;
+      if (!p.alive) return;
+      const last = g.lastPing.get(p.id) || now;
+      if (now - last > 30000) {
+        addLog('⚠ ' + p.name + ' 断线超时，自动淘汰', 'danger');
+        handlePlayerLeft(p.id);
+      }
+    });
+    // 发送心跳
+    broadcast({ type: 'ping', time: now });
+  }, 5000);
+}
+
+function initJoiner(roomCode, playerName) {
+  g.isHost = false;
+  g.roomCode = roomCode;
+  g.myName = playerName;
+  g.phase = PHASE.ROOM;
+
+  g.peer = new Peer();
+
+  g.peer.on('open', (myId) => {
+    g.myPlayerId = 'join-' + myId;
+    const hostPeerId = 'coup-' + roomCode;
+    console.log('Joiner connecting to:', hostPeerId);
+    const conn = g.peer.connect(hostPeerId);
+    g.hostConn = conn;
+
+    conn.on('open', () => {
+      console.log('Connected to host, sending join request');
+      conn.send({ type: 'join', playerId: g.myPlayerId, name: playerName });
+    });
+
+    conn.on('data', (data) => handleJoinerMessage(data));
+    conn.on('close', () => {
+      alert('与房主的连接已断开。');
+      resetToLobby();
+    });
+    conn.on('error', (err) => { console.warn('conn error', err); });
+  });
+
+  g.peer.on('error', (err) => {
+    console.error('Peer error:', err);
+    if (err.type === 'peer-unavailable') {
+      document.getElementById('lobby-error').style.display = 'block';
+      document.getElementById('lobby-error').textContent = '房间不存在或已关闭';
+      resetToLobby();
+    }
+  });
+
+  g.peer.on('disconnected', () => {
+    console.log('Peer disconnected, attempting reconnect...');
+    g.peer.reconnect();
+  });
+}
+
+function findPlayerByConn(conn) {
+  for (const [pid, c] of g.connections) {
+    if (c === conn) return pid;
+  }
+  return null;
+}
+
+function handlePlayerLeft(playerId) {
+  const p = g.players.find(x => x.id === playerId);
+  if (!p) return;
+  const name = p.name;
+  p.alive = false;
+  p.cards = [];
+  g.connections.delete(playerId);
+  addLog('⚠ ' + name + ' 离开了游戏', 'danger');
+  if (g.phase !== PHASE.LOBBY && g.phase !== PHASE.ROOM && g.phase !== PHASE.GAME_OVER) {
+    checkGameOver();
+    if (g.phase !== PHASE.GAME_OVER) {
+      if (g.players[g.currentPlayerIdx] && !g.players[g.currentPlayerIdx].alive) {
+        advanceTurn();
+      }
+      renderGame();
+    }
+  }
+  if (g.phase === PHASE.ROOM) {
+    renderRoomPlayers();
+  }
+}
+
+function resetToLobby() {
+  clearGameTimeout();
+  if (g.disconnectTimer) { clearInterval(g.disconnectTimer); g.disconnectTimer = null; }
+  if (g.peer) { try { g.peer.destroy(); } catch(e) {} }
+  g.peer = null;
+  g.connections.clear();
+  g.hostConn = null;
+  g.phase = PHASE.LOBBY;
+  g.isHost = false;
+  g.roomCode = '';
+  g.players = [];
+  g.deck = [];
+  g.discardPile = [];
+  switchScreen('lobby');
+}
+
+// ============================================================
+// 消息处理（Host 端）
+// ============================================================
+
+function handleHostMessage(conn, data) {
+  if (data.type === 'join') {
+    handleJoinRequest(conn, data);
+    return;
+  }
+
+  // 游戏阶段的消息均来自加入者 → 由 Host 统一处理
+  const playerId = data.playerId;
+  if (!playerId) return;
+
+  // 更新心跳
+  g.lastPing.set(playerId, Date.now());
+
+  switch (data.type) {
+    case 'pong':
+      g.lastPing.set(playerId, Date.now());
+      break;
+
+    case 'action-choice':
+      handleActionChoice(playerId, data);
+      break;
+
+    case 'challenge':
+      handleChallenge(playerId, data);
+      break;
+    case 'pass-challenge':
+      handlePassChallenge(playerId);
+      break;
+
+    case 'block':
+      handleBlock(playerId, data);
+      break;
+    case 'pass-block':
+      handlePassBlock(playerId);
+      break;
+
+    case 'challenge-block':
+      handleChallengeBlock(playerId, data);
+      break;
+    case 'pass-block-challenge':
+      handlePassBlockChallenge(playerId);
+      break;
+
+    case 'discard':
+      handleDiscardChoice(playerId, data);
+      break;
+
+    case 'exchange-choice':
+      handleExchangeChoice(playerId, data);
+      break;
+  }
+}
+
+function handleJoinRequest(conn, data) {
+  const { playerId, name } = data;
+  // 检查是否已满
+  if (g.players.length >= 6) {
+    conn.send({ type: 'join-rejected', reason: '房间已满（最多 6 人）' });
+    return;
+  }
+  // 检查是否已开始
+  if (g.phase !== PHASE.ROOM) {
+    conn.send({ type: 'join-rejected', reason: '游戏已开始' });
+    return;
+  }
+  // 接受加入
+  g.connections.set(playerId, conn);
+  g.players.push({ id: playerId, name, coins: 0, cards: [], alive: true });
+  g.lastPing.set(playerId, Date.now());
+
+  // 发送确认给新玩家
+  conn.send({
+    type: 'joined',
+    playerId: playerId,
+    players: g.players.map(p => ({ id: p.id, name: p.name, alive: p.alive })),
+  });
+
+  // 广播新玩家给其他玩家
+  broadcast({
+    type: 'player-joined',
+    playerId: playerId,
+    name: name,
+  });
+
+  addLog('→ ' + name + ' 加入了房间');
+  renderRoomPlayers();
+}
+
+// ============================================================
+// 消息处理（Joiner 端）
+// ============================================================
+
+function handleJoinerMessage(data) {
+  switch (data.type) {
+    case 'joined':
+      g.myPlayerId = data.playerId;
+      g.players = data.players;
+      g.phase = PHASE.ROOM;
+      switchScreen('room');
+      document.getElementById('room-code-show').textContent = g.roomCode;
+      renderRoomPlayers();
+      break;
+
+    case 'join-rejected':
+      alert(data.reason);
+      resetToLobby();
+      break;
+
+    case 'player-joined':
+      g.players.push({ id: data.playerId, name: data.name, coins: 0, cards: [], alive: true });
+      addLog('→ ' + data.name + ' 加入了房间');
+      renderRoomPlayers();
+      break;
+
+    case 'player-left':
+      handlePlayerLeft(data.playerId);
+      break;
+
+    case 'game-start':
+      handleGameStart(data);
+      break;
+
+    case 'phase-update':
+      handlePhaseUpdate(data);
+      break;
+
+    case 'action-result':
+      handleActionResult(data);
+      break;
+
+    case 'ping':
+      if (g.hostConn && g.hostConn.open) {
+        sendToHost({ type: 'pong', time: Date.now(), playerId: g.myPlayerId });
+      }
+      break;
+
+    case 'game-over':
+      handleGameOverMsg(data);
+      break;
+
+    case 'exchange-cards':
+      // 接收大使交换的卡牌（仅发送给交换玩家本人）
+      g.exchangeCards = data.exchangeCards;
+      g.exchangeChosen = new Set();
+      showExchangeUI();
+      break;
+
+    case 'my-cards-update':
+      // 定向更新自己的手牌（质疑换牌后、弃牌后）
+      const myP2 = g.players.find(p => p.id === g.myPlayerId);
+      if (myP2 && data.cards) {
+        myP2.cards = [...data.cards];
+      }
+      renderGame();
+      break;
+
+    case 'host-left':
+      alert('房主已离开房间。');
+      resetToLobby();
+      break;
+
+    case 'log':
+      addLog(data.msg, data.cls || '');
+      break;
+  }
+}
+
+// ============================================================
+// 房间 UI 更新
+// ============================================================
+
+function renderRoomPlayers() {
+  const container = document.getElementById('room-player-list');
+  const startBtn = document.getElementById('btn-start-game');
+  container.innerHTML = g.players.map((p, i) =>
+    `<div class="player-list-item">
+      <span class="name">${escHtml(p.name)}</span>
+      <span class="badge">${i === 0 ? '房主' : '已准备'}</span>
+    </div>`
+  ).join('');
+  startBtn.disabled = g.players.length < 2;
+  startBtn.textContent = '🎮 开始游戏（' + g.players.length + ' 人）';
+}
+
+function escHtml(s) {
+  const el = document.createElement('span');
+  el.textContent = s;
+  return el.innerHTML;
+}
+
+// ============================================================
+// 开始游戏
+// ============================================================
+
+function startGame() {
+  if (!g.isHost) return;
+  if (g.players.length < 2) return;
+
+  // 初始化牌库
+  let deck = shuffle(FULL_DECK);
+  // 2 人游戏：移除随机 3 张
+  if (g.players.length === 2) {
+    deck = deck.slice(0, 12);
+  }
+
+  // 发牌：每人 2 张
+  g.players.forEach(p => {
+    p.cards = [deck.pop(), deck.pop()];
+    p.coins = 2;
+    p.alive = true;
+  });
+  g.deck = deck;
+  g.discardPile = [];
+  g.currentPlayerIdx = 0;
+  g.phase = PHASE.CHOOSING_ACTION;
+
+  // 构建公开状态（不包含任何玩家的手牌内容，仅发送数量）
+  const publicPlayers = g.players.map(p => ({
+    id: p.id, name: p.name, coins: p.coins,
+    cardsLen: p.cards.length, alive: p.alive,
+  }));
+
+  // 给每个玩家定向发送游戏状态，仅附上该玩家自己的手牌
+  g.players.forEach(p => {
+    const state = {
+      type: 'game-start',
+      players: publicPlayers,
+      deckCount: g.deck.length,
+      currentPlayerIdx: g.currentPlayerIdx,
+      myCards: p.cards, // 仅此玩家可见自己的手牌
+    };
+    if (p.id === g.myPlayerId) {
+      handleGameStart(state);
+    } else {
+      sendTo(p.id, state);
+    }
+  });
+
+  addLog('🎮 游戏开始！共 ' + g.players.length + ' 名玩家', 'highlight');
+  switchScreen('game');
+  renderGame();
+}
+
+function handleGameStart(data) {
+  // 从公开信息构建玩家列表：仅自己能看到手牌内容
+  g.players = data.players.map(p => ({
+    id: p.id, name: p.name, coins: p.coins,
+    // 用 '?' 占位表示未知手牌；自己的手牌稍后通过 myCards 设置
+    cards: Array(p.cardsLen || 0).fill('?'),
+    alive: p.alive,
+  }));
+  // 设置自己的手牌（仅自己能看到的私密信息）
+  const myP = g.players.find(p => p.id === g.myPlayerId);
+  if (myP && data.myCards) {
+    myP.cards = [...data.myCards];
+  }
+  g.deck = []; // 客户端不知道牌堆具体内容（由 Host 维护）
+  g.currentPlayerIdx = data.currentPlayerIdx;
+  g.phase = PHASE.CHOOSING_ACTION;
+  g.discardPile = [];
+  document.getElementById('deck-count-text').textContent = data.deckCount;
+
+  switchScreen('game');
+  renderGame();
+  addLog('🎮 游戏开始！共 ' + g.players.length + ' 名玩家', 'highlight');
+}
+
+// ============================================================
+// 游戏 UI 渲染
+// ============================================================
+
+function renderGame() {
+  renderTurnIndicator();
+  renderOpponents();
+  renderMyCards();
+  renderActionPanel();
+  renderChallengeBar();
+  renderBlockBar();
+  updateTopBar();
+}
+
+function updateTopBar() {
+  document.getElementById('room-info-text').textContent = '房间 ' + g.roomCode;
+  document.getElementById('deck-info-display').style.display = 'flex';
+  document.getElementById('deck-count-text').textContent = g.deck.length;
+}
+
+function renderTurnIndicator() {
+  const el = document.getElementById('turn-indicator');
+  if (g.phase === PHASE.GAME_OVER) {
+    el.textContent = '游戏结束';
+    return;
+  }
+  const cp = g.players[g.currentPlayerIdx];
+  if (!cp) { el.textContent = ''; return; }
+  if (cp.id === g.myPlayerId) {
+    el.textContent = '⭐ 轮到你了';
+  } else {
+    el.textContent = '等待 ' + cp.name + ' 行动...';
+  }
+}
+
+function renderOpponents() {
+  const container = document.getElementById('opponents-area');
+  const others = g.players.filter(p => p.id !== g.myPlayerId);
+  container.innerHTML = others.map(p => {
+    const isTurn = g.players[g.currentPlayerIdx] && g.players[g.currentPlayerIdx].id === p.id;
+    const cardCount = p.alive ? p.cards.length : 0;
+    const cardsHtml = Array(cardCount).fill(
+      `<img src="${CARD_BACK}" alt="卡背" width="36" height="52">`
+    ).join('');
+    return `<div class="opponent-card${isTurn ? ' current-turn' : ''}${!p.alive ? ' eliminated' : ''}">
+      <div class="opp-name">${escHtml(p.name)}${!p.alive ? ' 💀' : ''}</div>
+      <div class="opp-coins">🪙 ${p.coins}</div>
+      <div class="opp-cards">${cardsHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+/** 渲染自己的手牌 */
+function renderMyCards() {
+  const container = document.getElementById('my-cards');
+  const mp = me();
+  if (!mp) { container.innerHTML = ''; return; }
+
+  document.getElementById('my-name-display').textContent = mp.name + (mp.alive ? '' : ' 💀');
+  document.getElementById('my-coins-num').textContent = mp.coins;
+
+  container.innerHTML = mp.cards.map((roleId, i) => {
+    const role = getRole(roleId);
+    const imgSrc = role ? role.img : CARD_BACK;
+    return `<div class="card-wrapper" data-index="${i}">
+      <img src="${imgSrc}" alt="${role ? role.name : '卡牌'}" width="80" height="116">
+      <div class="card-role-label">${role ? role.name : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+/** 渲染行动面板 */
+function renderActionPanel() {
+  const panel = document.getElementById('action-panel');
+  panel.innerHTML = '';
+
+  // 只有自己的回合且处于选择阶段才显示
+  if (g.phase !== PHASE.CHOOSING_ACTION) return;
+  const cp = g.players[g.currentPlayerIdx];
+  if (!cp || cp.id !== g.myPlayerId) return;
+  if (!cp.alive) return;
+
+  const coins = cp.coins;
+  const mustCoup = coins >= 10;
+
+  // 通用行动
+  if (!mustCoup) {
+    panel.appendChild(makeBtn('收入 (+1💰)', () => doAction('income')));
+    panel.appendChild(makeBtn('外国援助 (+2💰)', () => doAction('foreign_aid')));
+  }
+  panel.appendChild(makeBtn('政变 (-7💰)', () => {
+    if (coins < 7) { addLog('金币不足，无法政变', 'danger'); return; }
+    pickTargetThen('coup', (targetId) => doAction('coup', targetId));
+  }, mustCoup ? 'btn-danger' : ''));
+
+  if (!mustCoup) {
+    panel.appendChild(makeBtn('公爵·征税 (+3💰)', () => doAction('tax', null, 'duke')));
+    panel.appendChild(makeBtn('刺客·暗杀 (-3💰)', () => {
+      if (coins < 3) { addLog('金币不足，无法暗杀', 'danger'); return; }
+      pickTargetThen('assassinate', (targetId) => doAction('assassinate', targetId, 'assassin'));
+    }));
+    panel.appendChild(makeBtn('船长·勒索 (偷2💰)', () =>
+      pickTargetThen('steal', (targetId) => doAction('steal', targetId, 'captain'))
+    ));
+    panel.appendChild(makeBtn('大使·交换', () => doAction('exchange', null, 'ambassador')));
+  }
+}
+
+function makeBtn(text, handler, extraClass = '') {
+  const btn = document.createElement('button');
+  btn.className = 'btn ' + extraClass;
+  btn.textContent = text;
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    handler();
+  });
+  return btn;
+}
+
+/** 选择目标玩家 */
+function pickTargetThen(actionType, callback) {
+  const alive = g.players.filter(p => p.alive && p.id !== g.myPlayerId);
+  if (alive.length === 0) { addLog('没有可选目标', 'danger'); return; }
+  if (alive.length === 1) { callback(alive[0].id); return; }
+
+  // 多个目标 → 弹窗选择
+  const html = '<h3>选择目标</h3>' + alive.map(p =>
+    `<button class="btn btn-block" id="target-${p.id}">${escHtml(p.name)} (🪙${p.coins})</button>`
+  ).join('');
+  showModal(html);
+  alive.forEach(p => {
+    document.getElementById('target-' + p.id).addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      hideModal();
+      callback(p.id);
+    });
+  });
+}
+
+// ============================================================
+// 质疑/阻挡条
+// ============================================================
+
+function renderChallengeBar() {
+  const bar = document.getElementById('challenge-bar');
+  const text = document.getElementById('challenge-text');
+  bar.classList.remove('active');
+
+  if (!me() || !me().alive) return;
+
+  // 阶段 1：质疑行动
+  if (g.phase === PHASE.WAITING_CHALLENGE) {
+    const ap = g.pendingAction;
+    if (!ap) return;
+    if (ap.playerId === g.myPlayerId) return; // 不能质疑自己
+
+    bar.classList.add('active');
+    text.innerHTML = `${escHtml(roleName(ap.claimedRoleId))} · ${ap.type} — <button class="btn btn-danger btn-small" id="btn-challenge">质疑！</button> (${g.challengeTimer}s)`;
+    document.getElementById('btn-challenge').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      sendGameMsg('challenge', {});
+    });
+    return;
+  }
+
+  // 阶段 2：质疑阻挡
+  if (g.phase === PHASE.WAITING_BLOCK_CHALLENGE) {
+    const ap = g.pendingAction;
+    if (!ap) return;
+    // 阻挡者自己不能质疑自己
+    if (g.pendingBlockerId === g.myPlayerId) return;
+    // 原行动玩家也可以质疑阻挡（被阻挡的人）
+
+    bar.classList.add('active');
+    const blockerName = (g.players.find(p => p.id === g.pendingBlockerId) || {}).name || '?';
+    text.innerHTML = `${escHtml(blockerName)} 声称 ${escHtml(roleName(g.pendingBlockRole))} 阻挡 —
+      <button class="btn btn-danger btn-small" id="btn-challenge-block">质疑阻挡！</button> (${g.challengeTimer}s)`;
+    document.getElementById('btn-challenge-block').addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      sendGameMsg('challenge-block', {});
+    });
+    return;
+  }
+}
+
+function renderBlockBar() {
+  const bar = document.getElementById('block-bar');
+  const text = document.getElementById('block-text');
+  bar.classList.remove('active');
+  if (g.phase !== PHASE.WAITING_BLOCK) return;
+  const ap = g.pendingAction;
+  if (!ap) return;
+
+  // 谁可以阻挡？
+  let canBlock = false;
+  if (ap.type === 'foreign_aid') {
+    // 任何人都可以声称公爵来阻挡外国援助
+    if (ap.playerId !== g.myPlayerId && me() && me().alive) canBlock = true;
+  } else if (ap.type === 'assassinate' || ap.type === 'steal') {
+    // 只有目标可以阻挡
+    if (ap.targetId === g.myPlayerId) canBlock = true;
+  }
+
+  if (!canBlock) return;
+  bar.classList.add('active');
+
+  let blockRoles = [];
+  if (ap.type === 'foreign_aid') blockRoles = [ROLES.DUKE];
+  else if (ap.type === 'assassinate') blockRoles = [ROLES.CONTESSA];
+  else if (ap.type === 'steal') blockRoles = [ROLES.CAPTAIN, ROLES.AMBASSADOR];
+
+  const buttons = blockRoles.map(r =>
+    `<button class="btn btn-small" id="block-${r.id}">${r.name}</button>`
+  ).join('');
+
+  text.innerHTML = `阻挡？${buttons} <button class="btn btn-small" id="btn-pass-block">不阻挡</button> (${g.challengeTimer}s)`;
+
+  blockRoles.forEach(r => {
+    const btn = document.getElementById('block-' + r.id);
+    if (btn) btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      sendGameMsg('block', { claimedRoleId: r.id });
+    });
+  });
+  const passBtn = document.getElementById('btn-pass-block');
+  if (passBtn) passBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    sendGameMsg('pass-block', {});
+  });
+}
+
+// ============================================================
+// 发送游戏消息（统一入口）
+// ============================================================
+
+function sendGameMsg(type, data) {
+  const msg = { type, playerId: g.myPlayerId, ...data };
+  if (g.isHost) {
+    // Host 自己处理
+    handleHostMessage(null, msg);
+  } else {
+    sendToHost(msg);
+  }
+}
+
+// ============================================================
+// 行动选择
+// ============================================================
+
+function doAction(actionType, targetId, claimedRoleId) {
+  if (g.phase !== PHASE.CHOOSING_ACTION) return;
+  sendGameMsg('action-choice', { actionType, targetId, claimedRoleId });
+}
+
+function handleActionChoice(playerId, data) {
+  const { actionType, targetId, claimedRoleId } = data;
+  const player = g.players.find(p => p.id === playerId);
+  if (!player || !player.alive) return;
+
+  // 验证金币
+  let cost = 0;
+  if (actionType === 'coup') cost = 7;
+  else if (actionType === 'assassinate') cost = 3;
+
+  if (player.coins < cost) return; // 不够钱，拒绝
+
+  // 扣除费用
+  player.coins -= cost;
+
+  // 构建待处理行动
+  g.pendingAction = {
+    type: actionType,
+    playerId: playerId,
+    targetId: targetId || null,
+    claimedRoleId: claimedRoleId || null,
+    cost: cost,
+  };
+
+  // 是否需要质疑阶段？（只有声称角色的行动才可被质疑）
+  if (claimedRoleId) {
+    startChallengePhase();
+  } else if (actionType === 'foreign_aid') {
+    // 外国援助不能被质疑，但可以被阻挡
+    startBlockPhase();
+  } else {
+    // 收入 / 政变：直接执行
+    executeAction();
+  }
+
+  broadcastPhaseUpdate();
+  if (g.isHost) renderGame();
+}
+
+// ============================================================
+// 质疑阶段
+// ============================================================
+
+function startChallengePhase() {
+  g.phase = PHASE.WAITING_CHALLENGE;
+  g.challengeResolved = false;
+  g.challengeTimer = CHALLENGE_TIMEOUT;
+
+  if (g.isHost) {
+    clearGameTimeout();
+    runChallengeCountdown();
+  }
+}
+
+function runChallengeCountdown() {
+  if (g.challengeTimer <= 0) {
+    // 超时 → 无质疑
+    g.phase = g.pendingAction.type === 'foreign_aid' || g.pendingAction.type === 'assassinate' || g.pendingAction.type === 'steal'
+      ? PHASE.WAITING_BLOCK : PHASE.CHOOSING_ACTION;
+    if (g.phase === PHASE.CHOOSING_ACTION) {
+      executeAction();
+    } else {
+      startBlockPhase();
+    }
+    broadcastPhaseUpdate();
+    renderGame();
+    return;
+  }
+  g.timeoutId = setTimeout(() => {
+    g.challengeTimer--;
+    broadcastPhaseUpdate();
+    renderGame();
+    runChallengeCountdown();
+  }, 1000);
+}
+
+function handleChallenge(playerId, data) {
+  if (g.phase !== PHASE.WAITING_CHALLENGE) return;
+  if (g.challengeResolved) return;
+  g.challengeResolved = true;
+  clearGameTimeout();
+
+  const ap = g.pendingAction;
+  const targetPlayer = g.players.find(p => p.id === ap.playerId);
+  const challenger = g.players.find(p => p.id === playerId);
+
+  if (!targetPlayer || !challenger || !challenger.alive) return;
+
+  // 检查被质疑者是否真的持有声称的角色
+  const hasRole = targetPlayer.cards.includes(ap.claimedRoleId);
+
+  if (!hasRole) {
+    // 质疑成功：行动作废，被质疑者失去 1 影响力
+    addLog('⚡ ' + challenger.name + ' 质疑 ' + targetPlayer.name + ' — 质疑成功！', 'highlight');
+    broadcast({ type: 'log', msg: '⚡ ' + challenger.name + ' 质疑 ' + targetPlayer.name + ' — 质疑成功！', cls: 'highlight' });
+    g.phase = PHASE.DISCARDING;
+    g.pendingAction = { ...ap, blocked: true, discardPlayerId: ap.playerId, discardReason: '质疑成功' };
+  } else {
+    // 质疑失败：质疑者失去 1 影响力；被质疑者展示角色→放回牌堆→重抽 1 张
+    addLog('⚡ ' + challenger.name + ' 质疑 ' + targetPlayer.name + ' — 质疑失败！', 'highlight');
+    broadcast({ type: 'log', msg: '⚡ ' + challenger.name + ' 质疑 ' + targetPlayer.name + ' — 质疑失败！', cls: 'highlight' });
+    // 展示并替换
+    const idx = targetPlayer.cards.indexOf(ap.claimedRoleId);
+    targetPlayer.cards.splice(idx, 1);
+    g.discardPile.push(ap.claimedRoleId);
+    // 牌堆洗入展示的牌，重新抽一张
+    g.deck = shuffle([...g.deck, ap.claimedRoleId]);
+    targetPlayer.cards.push(g.deck.pop());
+    addLog(targetPlayer.name + ' 展示了 ' + roleName(ap.claimedRoleId) + ' 并更换了手牌');
+    // 若被质疑者不是 Host，定向发送新卡牌
+    if (ap.playerId !== g.myPlayerId) {
+      sendTo(ap.playerId, { type: 'my-cards-update', cards: [...targetPlayer.cards] });
+    }
+
+    g.phase = PHASE.DISCARDING;
+    g.pendingAction = { ...ap, discardPlayerId: challenger.id, discardReason: '质疑失败', actionStillProceeds: true };
+  }
+
+  broadcastPhaseUpdate();
+  renderGame();
+  if (g.isHost) handleDiscardFlow();
+}
+
+function handlePassChallenge(playerId) {
+  // 单个玩家放弃质疑 — 在超时驱动模式下，此方法用于记录
+  // 实际由 Host 超时统一处理
+}
+
+// ============================================================
+// 阻挡阶段
+// ============================================================
+
+function startBlockPhase() {
+  g.phase = PHASE.WAITING_BLOCK;
+  g.challengeTimer = CHALLENGE_TIMEOUT;
+
+  if (g.isHost) {
+    clearGameTimeout();
+    runBlockCountdown();
+  }
+}
+
+function runBlockCountdown() {
+  if (g.challengeTimer <= 0) {
+    // 超时 → 无阻挡，直接执行
+    executeAction();
+    broadcastPhaseUpdate();
+    renderGame();
+    return;
+  }
+  g.timeoutId = setTimeout(() => {
+    g.challengeTimer--;
+    broadcastPhaseUpdate();
+    renderGame();
+    runBlockCountdown();
+  }, 1000);
+}
+
+function handleBlock(playerId, data) {
+  if (g.phase !== PHASE.WAITING_BLOCK) return;
+  const ap = g.pendingAction;
+  if (!ap) return;
+  if (ap.playerId === playerId) return; // 不能阻挡自己
+
+  // 验证阻挡合法性
+  const { claimedRoleId } = data;
+  const role = getRole(claimedRoleId);
+  if (!role) return;
+
+  const condition = BLOCKABLE_BY[ap.type];
+  if (!condition || !condition(role)) return; // 该角色不能阻挡此行动
+
+  // 只有目标玩家（或被阻挡外国援助的任何人）能阻挡
+  if (ap.type !== 'foreign_aid' && ap.targetId !== playerId) return;
+
+  clearGameTimeout();
+  g.pendingBlockerId = playerId;
+  g.pendingBlockRole = claimedRoleId;
+  g.blockChallengeResolved = false;
+
+  const blocker = g.players.find(p => p.id === playerId);
+  const blockerName = blocker ? blocker.name : '?';
+  addLog('🛡 ' + blockerName + ' 声称拥有 ' + roleName(claimedRoleId) + ' 进行阻挡', 'highlight');
+  broadcast({ type: 'log', msg: '🛡 ' + blockerName + ' 声称 ' + roleName(claimedRoleId) + ' 阻挡', cls: 'highlight' });
+
+  // 进入阻挡质疑阶段
+  g.phase = PHASE.WAITING_BLOCK_CHALLENGE;
+  g.challengeTimer = CHALLENGE_TIMEOUT;
+  broadcastPhaseUpdate();
+  renderGame();
+
+  if (g.isHost) {
+    clearGameTimeout();
+    runBlockChallengeCountdown();
+  }
+}
+
+function handlePassBlock(playerId) {
+  // 由 Host 超时统一处理
+}
+
+// ============================================================
+// 阻挡质疑阶段
+// ============================================================
+
+function runBlockChallengeCountdown() {
+  if (g.challengeTimer <= 0) {
+    // 超时 → 无人质疑阻挡，阻挡生效
+    addLog('阻挡生效，行动被取消', 'highlight');
+    broadcast({ type: 'log', msg: '阻挡生效，行动被取消', cls: 'highlight' });
+    g.pendingAction.blocked = true;
+    executeAction(); // blocked action → advance turn
+    broadcastPhaseUpdate();
+    renderGame();
+    return;
+  }
+  g.timeoutId = setTimeout(() => {
+    g.challengeTimer--;
+    broadcastPhaseUpdate();
+    renderGame();
+    runBlockChallengeCountdown();
+  }, 1000);
+}
+
+function handleChallengeBlock(playerId, data) {
+  if (g.phase !== PHASE.WAITING_BLOCK_CHALLENGE) return;
+  if (g.blockChallengeResolved) return;
+  g.blockChallengeResolved = true;
+  clearGameTimeout();
+
+  const blocker = g.players.find(p => p.id === g.pendingBlockerId);
+  const challenger = g.players.find(p => p.id === playerId);
+  if (!blocker || !challenger || !challenger.alive || !blocker.alive) return;
+
+  const hasRole = blocker.cards.includes(g.pendingBlockRole);
+
+  if (!hasRole) {
+    // 阻挡质疑成功：阻挡无效，阻挡者失去 1 影响力
+    addLog('⚡ ' + challenger.name + ' 质疑阻挡 — 质疑成功！阻挡无效', 'highlight');
+    broadcast({ type: 'log', msg: '⚡ 质疑阻挡成功！阻挡无效', cls: 'highlight' });
+    g.pendingAction.blocked = false; // 阻挡被移除
+    g.phase = PHASE.DISCARDING;
+    g.pendingAction.discardPlayerId = blocker.id;
+    g.pendingAction.discardReason = '阻挡质疑成功';
+    g.pendingAction.actionStillProceeds = true; // 行动继续执行
+  } else {
+    // 阻挡质疑失败：质疑者失去 1 影响力；阻挡者展示→放回→重抽
+    addLog('⚡ ' + challenger.name + ' 质疑阻挡 — 质疑失败！阻挡有效', 'highlight');
+    broadcast({ type: 'log', msg: '⚡ 质疑阻挡失败！阻挡有效', cls: 'highlight' });
+    const idx = blocker.cards.indexOf(g.pendingBlockRole);
+    blocker.cards.splice(idx, 1);
+    g.discardPile.push(g.pendingBlockRole);
+    g.deck = shuffle([...g.deck, g.pendingBlockRole]);
+    blocker.cards.push(g.deck.pop());
+    // 定向发送新卡牌给阻挡者
+    if (g.pendingBlockerId !== g.myPlayerId) {
+      sendTo(g.pendingBlockerId, { type: 'my-cards-update', cards: [...blocker.cards] });
+    }
+    g.pendingAction.blocked = true;
+    g.phase = PHASE.DISCARDING;
+    g.pendingAction.discardPlayerId = challenger.id;
+    g.pendingAction.discardReason = '阻挡质疑失败';
+  }
+
+  broadcastPhaseUpdate();
+  renderGame();
+  if (g.isHost) handleDiscardFlow();
+}
+
+function handlePassBlockChallenge(playerId) {
+  // 由 Host 超时处理
+}
+
+// ============================================================
+// 执行行动
+// ============================================================
+
+function executeAction() {
+  const ap = g.pendingAction;
+  if (!ap) { advanceTurn(); return; }
+
+  if (ap.blocked) {
+    // 行动被阻挡 → 不执行效果，直接进入弃牌或下一回合
+    if (ap.discardPlayerId) {
+      handleDiscardFlow();
+    } else {
+      advanceTurn();
+    }
+    return;
+  }
+
+  const player = g.players.find(p => p.id === ap.playerId);
+  if (!player || !player.alive) { advanceTurn(); return; }
+
+  switch (ap.type) {
+    case 'income':
+      player.coins += 1;
+      addLog(player.name + ' 执行了 收入 (+1💰)', '');
+      broadcast({ type: 'log', msg: player.name + ' 执行了 收入 (+1💰)' });
+      break;
+
+    case 'foreign_aid':
+      player.coins += 2;
+      addLog(player.name + ' 执行了 外国援助 (+2💰)', '');
+      broadcast({ type: 'log', msg: player.name + ' 执行了 外国援助 (+2💰)' });
+      break;
+
+    case 'coup': {
+      const target = g.players.find(p => p.id === ap.targetId);
+      if (target && target.alive) {
+        addLog(player.name + ' 发动 政变 → ' + target.name + ' 失去 1 影响力', 'highlight');
+        broadcast({ type: 'log', msg: player.name + ' 发动政变 → ' + target.name, cls: 'highlight' });
+        g.phase = PHASE.DISCARDING;
+        g.pendingAction.discardPlayerId = target.id;
+        g.pendingAction.discardReason = '政变';
+        broadcastPhaseUpdate();
+        renderGame();
+        handleDiscardFlow();
+        return;
+      }
+      break;
+    }
+
+    case 'tax':
+      player.coins += 3;
+      addLog(player.name + ' 以公爵身份 征税 (+3💰)', '');
+      broadcast({ type: 'log', msg: player.name + ' 征收了 3 金币' });
+      break;
+
+    case 'assassinate': {
+      const target = g.players.find(p => p.id === ap.targetId);
+      if (target && target.alive) {
+        addLog(player.name + ' 暗杀 ' + target.name, 'danger');
+        broadcast({ type: 'log', msg: player.name + ' 暗杀了 ' + target.name, cls: 'danger' });
+        g.phase = PHASE.DISCARDING;
+        g.pendingAction.discardPlayerId = target.id;
+        g.pendingAction.discardReason = '暗杀';
+        broadcastPhaseUpdate();
+        renderGame();
+        handleDiscardFlow();
+        return;
+      }
+      break;
+    }
+
+    case 'steal': {
+      const target = g.players.find(p => p.id === ap.targetId);
+      if (target && target.alive) {
+        const stolen = Math.min(2, target.coins);
+        target.coins -= stolen;
+        player.coins += stolen;
+        addLog(player.name + ' 从 ' + target.name + ' 偷取了 ' + stolen + '💰', '');
+        broadcast({ type: 'log', msg: player.name + ' 从 ' + target.name + ' 偷取了 ' + stolen + ' 金币' });
+      }
+      break;
+    }
+
+    case 'exchange':
+      if (g.isHost) {
+        startExchangeFlow(ap.playerId);
+        return;
+      }
+      break;
+  }
+
+  advanceTurn();
+}
+
+// ============================================================
+// 弃牌流程
+// ============================================================
+
+function handleDiscardFlow() {
+  const ap = g.pendingAction;
+  const discardPlayerId = ap.discardPlayerId;
+  const player = g.players.find(p => p.id === discardPlayerId);
+  if (!player || !player.alive || player.cards.length === 0) {
+    // 玩家已死或没有牌可弃
+    checkGameOver();
+    if (g.phase !== PHASE.GAME_OVER) {
+      if (ap.actionStillProceeds) {
+        // 行动仍需执行（如阻挡质疑成功，原行动继续）
+        g.pendingAction.blocked = false;
+        executeAction();
+      } else {
+        advanceTurn();
+      }
+    }
+    return;
+  }
+
+  if (player.cards.length === 1) {
+    // 只有一张牌 → 自动弃掉
+    discardCard(discardPlayerId, 0);
+  } else if (discardPlayerId === g.myPlayerId) {
+    // 需要选择弃哪张
+    g.phase = PHASE.DISCARDING;
+    broadcastPhaseUpdate();
+    renderGame();
+    enableDiscardSelection();
+  } else {
+    // 其他玩家弃牌 → 由他们自己选择（通过 phase-update 触发）
+    g.phase = PHASE.DISCARDING;
+    broadcastPhaseUpdate();
+    renderGame();
+  }
+}
+
+function enableDiscardSelection() {
+  const wrappers = document.querySelectorAll('#my-cards .card-wrapper');
+  wrappers.forEach(w => {
+    w.classList.add('selectable');
+    w.addEventListener('pointerdown', function handler(e) {
+      e.preventDefault();
+      const idx = parseInt(this.dataset.index);
+      wrappers.forEach(ww => ww.classList.remove('selectable'));
+      sendGameMsg('discard', { cardIndex: idx });
+      // 移除所有监听器
+      wrappers.forEach(ww => ww.removeEventListener('pointerdown', handler));
+    });
+  });
+}
+
+function handleDiscardChoice(playerId, data) {
+  if (g.phase !== PHASE.DISCARDING) return;
+  const ap = g.pendingAction;
+  if (!ap || ap.discardPlayerId !== playerId) return;
+  discardCard(playerId, data.cardIndex);
+}
+
+function discardCard(playerId, cardIndex) {
+  const player = g.players.find(p => p.id === playerId);
+  if (!player || !player.alive) return;
+
+  const discarded = player.cards.splice(cardIndex, 1)[0];
+  g.discardPile.push(discarded);
+  addLog(player.name + ' 弃置了 1 张角色牌 (' + roleName(discarded) + ')', 'danger');
+  broadcast({ type: 'log', msg: player.name + ' 失去 1 点影响力（弃置 ' + roleName(discarded) + '）', cls: 'danger' });
+
+  // 定向通知弃牌玩家其剩余手牌
+  if (playerId !== g.myPlayerId && player.alive) {
+    sendTo(playerId, { type: 'my-cards-update', cards: [...player.cards] });
+  }
+
+  // 检查玩家是否被淘汰
+  if (player.cards.length === 0) {
+    player.alive = false;
+    addLog(player.name + ' 被淘汰！', 'danger');
+    broadcast({ type: 'log', msg: player.name + ' 被淘汰出局！', cls: 'danger' });
+  }
+
+  // 更新牌堆计数
+  broadcast({ type: 'action-result', deckCount: g.deck.length, players: g.players.map(p => ({ id: p.id, coins: p.coins, cardsLen: p.cards.length, alive: p.alive })) });
+
+  if (checkGameOver()) return;
+
+  const ap = g.pendingAction;
+  if (ap && ap.actionStillProceeds && !ap.blocked) {
+    // 继续执行原行动
+    g.pendingAction.blocked = false;
+    g.phase = PHASE.CHOOSING_ACTION;
+    executeAction();
+  } else {
+    advanceTurn();
+  }
+}
+
+// ============================================================
+// 大使交换流程
+// ============================================================
+
+function startExchangeFlow(playerId) {
+  const player = g.players.find(p => p.id === playerId);
+  if (!player || !player.alive) { advanceTurn(); return; }
+
+  // 确保牌堆有足够的牌
+  ensureDeck(2);
+  const drawn = [g.deck.pop(), g.deck.pop()];
+  g.exchangeCards = [...player.cards, ...drawn];
+  g.exchangeChosen = new Set();
+  g.phase = PHASE.EXCHANGING;
+
+  addLog(player.name + ' 使用大使能力·交换牌', '');
+  broadcast({ type: 'log', msg: player.name + ' 正在交换手牌...' });
+
+  // 广播阶段更新（含 exchangePlayerId 让客户端知道谁在交换）
+  broadcastPhaseUpdate();
+  // 关键：将交换的卡牌私密发送给交换玩家本人
+  if (playerId === g.myPlayerId) {
+    // Host 自己是交换玩家 → 直接显示 UI
+    g.exchangeChosen = new Set();
+    showExchangeUI();
+  } else {
+    // 交换玩家是其他加入者 → 定向发送卡牌数据
+    sendTo(playerId, {
+      type: 'exchange-cards',
+      exchangeCards: g.exchangeCards,
+    });
+  }
+  renderGame();
+}
+
+function showExchangeUI() {
+  const cards = g.exchangeCards;
+  const chosen = g.exchangeChosen;
+  const html = `<h3>选择保留的手牌（最多 2 张）</h3>
+    <div class="modal-cards" id="exchange-card-list">
+      ${cards.map((roleId, i) => {
+        const role = getRole(roleId);
+        const isChosen = chosen.has(i);
+        return `<div class="exchange-card-item" data-idx="${i}">
+          <img src="${role ? role.img : CARD_BACK}" alt="${role ? role.name : ''}" class="${isChosen ? 'selected' : ''}" width="70" height="102">
+          <div style="font-size:11px;margin-top:4px;">${role ? role.name : ''}${i < cards.length - 2 ? ' (原有)' : ' (新抽)'}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <button class="btn btn-primary btn-block" id="btn-confirm-exchange">确认保留（已选 ${chosen.size}/2）</button>`;
+
+  showModal(html);
+
+  document.querySelectorAll('.exchange-card-item').forEach(el => {
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const idx = parseInt(el.dataset.idx);
+      if (chosen.has(idx)) {
+        chosen.delete(idx);
+      } else {
+        if (chosen.size >= 2) {
+          // 移除最早选择的
+          const first = chosen.values().next().value;
+          chosen.delete(first);
+        }
+        chosen.add(idx);
+      }
+      // 刷新显示
+      showExchangeUI();
+    });
+  });
+
+  document.getElementById('btn-confirm-exchange').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (chosen.size === 0) {
+      addLog('至少选择 1 张手牌保留');
+      return;
+    }
+    const keepIndices = Array.from(chosen);
+    hideModal();
+    sendGameMsg('exchange-choice', { keepIndices });
+  });
+}
+
+function handleExchangeChoice(playerId, data) {
+  if (g.phase !== PHASE.EXCHANGING) return;
+  const ap = g.pendingAction;
+  if (!ap || ap.playerId !== playerId) return;
+
+  const player = g.players.find(p => p.id === playerId);
+  if (!player) return;
+
+  const { keepIndices } = data;
+  // keepIndices 是 exchangeCards 中的索引
+  const keepCards = keepIndices.map(i => g.exchangeCards[i]);
+  // 未被保留的放回牌堆
+  const returned = g.exchangeCards.filter((_, i) => !keepIndices.includes(i));
+  g.deck = shuffle([...g.deck, ...returned]);
+  player.cards = keepCards;
+
+  addLog(player.name + ' 完成了手牌交换', '');
+  broadcast({ type: 'log', msg: player.name + ' 完成了手牌交换' });
+  broadcast({ type: 'action-result', deckCount: g.deck.length, players: g.players.map(p => ({ id: p.id, coins: p.coins, cardsLen: p.cards.length, alive: p.alive })) });
+
+  advanceTurn();
+}
+
+/** 确保牌堆有足够牌，不够则从弃牌堆洗入 */
+function ensureDeck(n) {
+  if (g.deck.length >= n) return;
+  if (g.discardPile.length > 0) {
+    g.deck = shuffle([...g.deck, ...g.discardPile]);
+    g.discardPile = [];
+    addLog('🔄 弃牌堆已洗入抽牌堆');
+    broadcast({ type: 'log', msg: '🔄 牌堆已用尽，弃牌堆已洗入' });
+  }
+  // 如果还不够，只能给剩下的
+  while (g.deck.length < n && g.discardPile.length > 0) {
+    g.deck.push(g.discardPile.pop());
+  }
+}
+
+// ============================================================
+// 回合推进
+// ============================================================
+
+function advanceTurn() {
+  clearGameTimeout();
+  if (checkGameOver()) return;
+
+  // 检查强制政变
+  const cp = g.players[g.currentPlayerIdx];
+  if (cp && cp.alive && cp.coins >= 10) {
+    addLog(cp.name + ' 拥有 10+ 金币，必须政变！', 'highlight');
+    broadcast({ type: 'log', msg: cp.name + ' 金币超过 10，必须执行政变！', cls: 'highlight' });
+  }
+
+  g.currentPlayerIdx = nextAliveIdx(g.currentPlayerIdx);
+  g.phase = PHASE.CHOOSING_ACTION;
+  g.pendingAction = null;
+  g.pendingBlockerId = null;
+  g.pendingBlockRole = null;
+  g.challengeResolved = false;
+  g.blockChallengeResolved = false;
+
+  broadcastPhaseUpdate();
+  renderGame();
+
+  // 如果当前玩家已淘汰（extreme edge case），继续推进
+  const ncp = g.players[g.currentPlayerIdx];
+  if (!ncp || !ncp.alive) {
+    advanceTurn();
+  }
+}
+
+// ============================================================
+// 游戏结束检测
+// ============================================================
+
+function checkGameOver() {
+  const alive = g.players.filter(p => p.alive);
+  if (alive.length <= 1) {
+    g.phase = PHASE.GAME_OVER;
+    const winner = alive[0] || null;
+    const msg = winner ? (winner.name + ' 获胜！🎉') : '平局！';
+    addLog(msg, 'highlight');
+    broadcast({ type: 'game-over', winnerId: winner ? winner.id : null, winnerName: winner ? winner.name : null });
+
+    g.pendingAction = null;
+    broadcastPhaseUpdate();
+    renderGame();
+    showGameOver(winner);
+    return true;
+  }
+  return false;
+}
+
+function handleGameOverMsg(data) {
+  g.phase = PHASE.GAME_OVER;
+  g.pendingAction = null;
+  const winner = data.winnerName;
+  addLog((winner || '平局') + ' 获胜！', 'highlight');
+  renderGame();
+  showGameOver(winner ? { name: winner } : null);
+}
+
+function showGameOver(winner) {
+  const banner = document.getElementById('result-banner');
+  if (winner) {
+    banner.className = 'result-banner active win';
+    banner.textContent = '🏆 ' + winner.name + ' 获胜！';
+  } else {
+    banner.className = 'result-banner active lose';
+    banner.textContent = '平局 — 所有玩家均被淘汰';
+  }
+
+  // 显示返回按钮
+  const panel = document.getElementById('action-panel');
+  panel.innerHTML = '';
+  if (g.isHost) {
+    panel.appendChild(makeBtn('🔄 再来一局', () => restartGame(), 'btn-primary'));
+  }
+  panel.appendChild(makeBtn('← 返回大厅', () => resetToLobby()));
+}
+
+function restartGame() {
+  if (!g.isHost) return;
+  // startGame 会完整重置所有玩家状态并发牌
+  startGame();
+}
+
+// ============================================================
+// 广播阶段更新
+// ============================================================
+
+function broadcastPhaseUpdate() {
+  const msg = {
+    type: 'phase-update',
+    phase: g.phase,
+    challengeTimer: g.challengeTimer,
+    pendingAction: g.pendingAction,
+    pendingBlockerId: g.pendingBlockerId,
+    pendingBlockRole: g.pendingBlockRole,
+    currentPlayerIdx: g.currentPlayerIdx,
+    deckCount: g.deck.length,
+    exchangePlayerId: g.phase === PHASE.EXCHANGING ? g.pendingAction?.playerId : null,
+    players: g.players.map(p => ({
+      id: p.id, name: p.name, coins: p.coins,
+      cardsLen: p.cards.length, alive: p.alive,
+    })),
+  };
+
+  if (g.isHost) {
+    broadcast(msg);
+    handlePhaseUpdate(msg);
+  }
+}
+
+function handlePhaseUpdate(data) {
+  g.phase = data.phase;
+  g.challengeTimer = data.challengeTimer;
+  if (data.pendingAction !== undefined) g.pendingAction = data.pendingAction;
+  g.pendingBlockerId = data.pendingBlockerId;
+  g.pendingBlockRole = data.pendingBlockRole;
+  g.currentPlayerIdx = data.currentPlayerIdx;
+  document.getElementById('deck-count-text').textContent = data.deckCount;
+
+  // 更新玩家状态
+  if (data.players) {
+    data.players.forEach(pu => {
+      const p = g.players.find(x => x.id === pu.id);
+      if (p) {
+        p.coins = pu.coins;
+        p.alive = pu.alive;
+        // cardsLen 用于知道其他玩家有几张牌，但不能看到内容
+        if (p.id !== g.myPlayerId && pu.cardsLen !== undefined) {
+          // 用占位符更新手牌数量
+          while (p.cards.length < pu.cardsLen) p.cards.push('?');
+          while (p.cards.length > pu.cardsLen) p.cards.pop();
+        }
+      }
+    });
+  }
+
+  // 特殊阶段处理
+  if (g.phase === PHASE.DISCARDING) {
+    const ap = g.pendingAction;
+    if (ap && ap.discardPlayerId === g.myPlayerId && me() && me().alive && me().cards.length > 1) {
+      enableDiscardSelection();
+    }
+  }
+
+  if (g.phase === PHASE.EXCHANGING && data.exchangePlayerId === g.myPlayerId && data.exchangeCards) {
+    g.exchangeCards = data.exchangeCards;
+    showExchangeUI();
+  }
+
+  renderGame();
+}
+
+function handleActionResult(data) {
+  document.getElementById('deck-count-text').textContent = data.deckCount;
+  if (data.players) {
+    data.players.forEach(pu => {
+      const p = g.players.find(x => x.id === pu.id);
+      if (p) {
+        p.coins = pu.coins;
+        p.alive = pu.alive;
+        while (p.cards.length < pu.cardsLen) p.cards.push('?');
+        while (p.cards.length > pu.cardsLen) p.cards.pop();
+      }
+    });
+  }
+  renderGame();
+}
+
+// ============================================================
+// 事件绑定
+// ============================================================
+
+function randomId() { return Math.random().toString(36).substring(2, 10); }
+
+document.getElementById('btn-create').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  const name = document.getElementById('input-nickname').value.trim() || ('玩家' + randomId().substring(0, 4));
+  g.myName = name;
+  const roomCode = String(Math.floor(100000 + Math.random() * 900000));
+  initHost(roomCode);
+});
+
+document.getElementById('btn-join').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  const code = document.getElementById('input-room-code').value.trim();
+  const name = document.getElementById('input-nickname').value.trim();
+  if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+    document.getElementById('lobby-error').style.display = 'block';
+    document.getElementById('lobby-error').textContent = '请输入 6 位数字房间码';
+    return;
+  }
+  if (!name) {
+    document.getElementById('lobby-error').style.display = 'block';
+    document.getElementById('lobby-error').textContent = '请输入昵称';
+    return;
+  }
+  document.getElementById('lobby-error').style.display = 'none';
+  g.myName = name;
+  initJoiner(code, name);
+});
+
+document.getElementById('btn-start-game').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  startGame();
+});
+
+document.getElementById('btn-leave-room').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (g.isHost) {
+    broadcast({ type: 'host-left' });
+  }
+  resetToLobby();
+});
+
+// 弹窗关闭
+document.getElementById('modal-overlay').addEventListener('pointerdown', function(e) {
+  if (e.target === this) hideModal();
+});
+
+// 输入框优化：数字键盘
+document.getElementById('input-room-code').addEventListener('input', function() {
+  this.value = this.value.replace(/[^0-9]/g, '').substring(0, 6);
+});
+
+// ============================================================
+// 初始化
+// ============================================================
+
+preloadImages();
+switchScreen('lobby');
+console.log('政变 Coup — 游戏加载完成');
+console.log('角色图片:', Object.values(ROLES).map(r => r.img));
+console.log('卡背:', CARD_BACK);
+</script>
+
+</body>
+</html>
